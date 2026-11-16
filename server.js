@@ -424,6 +424,22 @@ function sendFile(req, res, file, { mime, cache, allowRange } = {}) {
       return fs.createReadStream(file, { start, end }).pipe(res);
     }
   }
+  // pkg 快照里的压缩资源用 createReadStream 可能按错误的 stat.size 截断
+  // （WebWallGL 脚本会因此只发出前半段，iframe 里直接报语法错误）。
+  // 页面静态资源体积不大，整块读入后按实际 Buffer 长度发送。
+  const MAX_BUFFERED = 16 * 1024 * 1024;
+  if (stat.size <= MAX_BUFFERED) {
+    let body;
+    try {
+      body = fs.readFileSync(file);
+    } catch (err) {
+      return json(res, 500, { error: '读取文件失败：' + err.message });
+    }
+    headers['Content-Length'] = body.length;
+    res.writeHead(200, headers);
+    if (req.method === 'HEAD') return res.end();
+    return res.end(body);
+  }
   headers['Content-Length'] = stat.size;
   res.writeHead(200, headers);
   if (req.method === 'HEAD') return res.end();
@@ -497,10 +513,14 @@ function serveSceneLive(req, res, url) {
 // 渲染器本身（webwallgl.global.min.js 等）直接从 node_modules 提供
 function serveSceneEngine(req, res, url) {
   const rel = decodeURIComponent(url.pathname.replace(/^\/scene-engine\//, '')) || 'webwallgl.global.min.js';
-  const file = path.join(WEBWALLGL_DIR, rel);
-  if (!insideRoot(WEBWALLGL_DIR, file)) return json(res, 403, { error: '非法路径' });
+  const bundled = path.join(SCENE_LIVE_DIR, 'webwallgl.global.min.js.bin');
+  const file = rel === 'webwallgl.global.min.js' && fs.existsSync(bundled)
+    ? bundled
+    : path.join(WEBWALLGL_DIR, rel);
+  const root = file === bundled ? SCENE_LIVE_DIR : WEBWALLGL_DIR;
+  if (!insideRoot(root, file)) return json(res, 403, { error: '非法路径' });
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) return json(res, 404, { error: '文件不存在' });
-  sendFile(req, res, file, { cache: true });
+  sendFile(req, res, file, { cache: true, mime: 'text/javascript; charset=utf-8' });
 }
 
 // Scene 工程文件：project.json / scene.pkg / 松散材质模型（支持 Range）

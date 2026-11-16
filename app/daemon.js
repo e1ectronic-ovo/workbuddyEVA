@@ -5,6 +5,8 @@
 const fs = require('fs');
 const path = require('path');
 const { APP_ID, APP_NAME, LEGACY_APP_IDS, DATA_DIR } = require('../lib/paths');
+const ui = require('../lib/native-ui');
+const instanceLock = require('../lib/instance-lock');
 
 const LOG_FILE = path.join(DATA_DIR, 'daemon.log');
 const PORT = Math.max(1024, Math.min(65535, parseInt(process.env.WBWE_PORT || '47850', 10) || 47850));
@@ -36,6 +38,11 @@ async function main() {
   if (typeof fetch !== 'function') {
     throw new Error('需要 Node.js 22+（当前版本缺少 fetch）');
   }
+  if (!(await instanceLock.acquire())) {
+    log(APP_NAME + ' 已在运行，本次启动已忽略');
+    ui.info(APP_NAME + ' 已经在运行，无需重复启动。');
+    return;
+  }
   const running = await runningApp();
   if (running) {
     if (running.app === APP_ID) {
@@ -53,33 +60,50 @@ async function main() {
   const workbuddy = require('./workbuddy');
   const cdp = require('../lib/cdp');
   const inject = require('../lib/inject');
-  const ui = require('../lib/native-ui');
   const cdpPort = Number(process.env.WBWE_CDP_PORT) || workbuddy.DEFAULT_PORT;
 
   let closing = false;
+  let injected = false;
   let watcher = null;
   async function shutdown() {
     if (closing) return;
     closing = true;
     if (watcher) clearInterval(watcher);
     log('正在退出…');
-    try { await cdp.evaluate(inject.buildDispose, { timeout: 2500 }); } catch (_) {}
+    if (injected) { try { await cdp.evaluate(inject.buildDispose, { timeout: 2500 }); } catch (_) {} }
     try { info.server.close(); } catch (_) {}
+    instanceLock.release();
     await sleep(120);
     process.exit(0);
   }
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // 未显式要求重启时，先按“直接连接 / 启动未运行的 WorkBuddy”处理；
-  // 运行中但没有 CDP 则用原生对话框征得同意后再重启。
+  // 启动时 WorkBuddy 已在运行：先征得同意再强制重启，避免在旧实例上叠加半套注入。
+  // --restart-workbuddy / WBWE_RESTART_WORKBUDDY=1 视为已授权，静默重启。
   const preauthorized = process.argv.includes('--restart-workbuddy') || process.env.WBWE_RESTART_WORKBUDDY === '1';
+  let restart = preauthorized;
+  if (workbuddy.runningProcesses().length) {
+    if (!preauthorized) {
+      const ok = ui.confirm('检测到 WorkBuddy 正在运行。\n\nworkbuddyEVA 需要先退出 WorkBuddy 再接管调试通道，否则壁纸和面板可能无法正常注入。\n\n是否现在强制重启 WorkBuddy？（未保存的会话可能丢失）', 'No');
+      if (!ok) {
+        log('用户取消重启 WorkBuddy，退出');
+        ui.info('请先退出 WorkBuddy，再重新启动 ' + APP_NAME + '。');
+        await shutdown();
+        return;
+      }
+    }
+    log('正在退出 WorkBuddy…');
+    await workbuddy.stopWorkBuddy();
+    restart = true;
+  }
+
   let result = null;
   try {
-    result = await workbuddy.ensureCdp({ port: cdpPort, restart: preauthorized, log });
+    result = await workbuddy.ensureCdp({ port: cdpPort, restart, log });
   } catch (error) {
     if (error.code === 'NEED_RESTART') {
-      const ok = ui.confirm('WorkBuddy 正在运行，但没有开启调试通道，无法注入壁纸与面板。\n\n需要重启一次 WorkBuddy 才能继续。未保存的会话可能丢失，是否现在重启？', 'No');
+      const ok = ui.confirm('WorkBuddy 正在运行，但没有开启调试通道。\n\n需要重启一次 WorkBuddy 才能继续。未保存的会话可能丢失，是否现在重启？', 'No');
       if (!ok) {
         log('用户取消了重启 WorkBuddy，退出');
         ui.info(APP_NAME + ' 已退出。退出 WorkBuddy 后重新启动本程序，会自动唤起它。');
@@ -88,6 +112,7 @@ async function main() {
       }
       log('用户确认重启 WorkBuddy');
       try {
+        await workbuddy.stopWorkBuddy();
         result = await workbuddy.ensureCdp({ port: cdpPort, restart: true, log });
       } catch (retryError) {
         log('重启 WorkBuddy 失败: ' + retryError.message);
@@ -107,6 +132,7 @@ async function main() {
     }
   }
 
+  injected = true;
   workbuddy.rememberPort(result.port);
   log('WorkBuddy CDP 已就绪: ' + result.port
     + (result.launched ? '（已由本程序启动）' : '')

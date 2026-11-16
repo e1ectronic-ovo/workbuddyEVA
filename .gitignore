@@ -5,6 +5,7 @@ release/
 data/
 installer/payload/
 .testdata/
+scene-live/*.bin
 *.log
 *.tmp
 .DS_Store

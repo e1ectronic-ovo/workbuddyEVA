@@ -113,7 +113,7 @@ let toastTimer = 0;
 let gridKey = '';
 let sheetResolve = null;
 let sheetPrevFocus = null;
-let currentPane = 'library';
+let currentPane = 'accounts';
 
 if (EMBED) document.body.classList.add('embed');
 
@@ -481,7 +481,8 @@ function render(data) {
   const key = gridSignature(data);
   if (key !== gridKey) {
     gridKey = key;
-    renderGrid();
+    // 壁纸库不在前台时先不建卡片、不加载预览图，等切过去再渲染
+    if (currentPane === 'library') renderGrid();
   }
   if (prevVersion !== undefined && data.libraryVersion !== prevVersion) {
     const fresh = data.newProjects || [];
@@ -552,6 +553,11 @@ function showPane(name) {
       })
       .catch(err => toast(err.message, true));
   }
+  if (name === 'library') {
+    if (snapshot.projects && snapshot.projects.length) renderGrid();
+    load();
+  }
+  if (name === 'connection') load();
   if (name === 'models') loadWbModels().catch(err => toast(err.message, true));
   if (name === 'sessions') loadWbSessions().catch(err => toast(err.message, true));
   if (name === 'enhance') loadWbEnhance().catch(err => toast(err.message, true));
@@ -1654,5 +1660,9 @@ document.addEventListener('keydown', ev => {
   }
 });
 
+showPane('accounts');
 load();
-setInterval(load, 4000);
+setInterval(() => {
+  // 只在壁纸库前台时轮询完整状态，避免后台反复扫描壁纸目录、重绘卡片
+  if (currentPane === 'library') load();
+}, 4000);

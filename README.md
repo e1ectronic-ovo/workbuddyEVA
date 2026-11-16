@@ -28,11 +28,11 @@ npm start
 node app\daemon.js
 ```
 
-启动器会做三件事：
+启动器只允许运行一个实例（Windows 命名管道锁，重复双击会提示已在运行并退出，避免多端口冲突），随后做三件事：
 
 1. 在 `127.0.0.1:47850` 启动壁纸 HTTP 服务（只监听本机，不打开浏览器）；
-2. 查找 WorkBuddy 的 CDP 端口（`9222-9232`、进程命令行、本程序写入的端口文件），**WorkBuddy 没运行就自动带 `--remote-debugging-port` 启动它**；
-3. 发现 WorkBuddy 正在运行但没有 CDP 时，弹出一个原生 Windows 对话框询问是否重启（重启可能丢失未保存的会话，默认「否」；拒绝则本程序直接退出）。也可以事先授权：
+2. **WorkBuddy 没运行就自动带 `--remote-debugging-port` 启动它**，并复用已有的 CDP 端口（`9222-9232`、进程命令行、本程序写入的端口文件）；
+3. 发现 WorkBuddy 已经运行时，弹出一个原生 Windows 对话框提示先退出 WorkBuddy；确认后由本程序强制重启 WorkBuddy 再注入（未保存的会话可能丢失，默认「否」，拒绝则本程序直接退出）。也可以事先授权：
 
 ```powershell
 start.cmd --restart-workbuddy
@@ -44,7 +44,7 @@ WorkBuddy 退出后（托盘退出、崩溃或被关闭），本程序会在约 
 
 ## 用法
 
-1. 启动后 WorkBuddy 窗口右下角常驻一个桌面图标，点击即可打开控制面板。
+1. 启动后 WorkBuddy 窗口右下角常驻一个桌面图标，点击即可在右下角打开控制面板；面板默认停在「账号」页，壁纸库切过去时才渲染。
 2. 面板里点任意壁纸卡片即时生效；「清除壁纸」只移除壁纸层，不删除工坊文件。
 3. 面板右上角关闭按钮或 `Esc` 退出面板；底部图标始终保留，方便随时打开。
 4. 下次启动恢复上次壁纸；WorkBuddy 重启或页面刷新后，2 秒内自动补回壁纸层或右下角图标。
@@ -132,6 +132,7 @@ lib/renderer-runtime.js 渲染进程内的壁纸层、右下角图标、增强�
 lib/inject.js          注入脚本拼装
 lib/paths.js           数据目录解析（环境变量 / data-path.txt / 默认）
 lib/native-ui.js       启动阶段的 Windows 原生对话框
+lib/instance-lock.js   单实例锁（命名管道），防止重复启动与端口冲突
 lib/data-migration.js  旧配置迁移
 lib/store.js           壁纸配置读写
 lib/wb-paths.js        WorkBuddy 数据目录定位
