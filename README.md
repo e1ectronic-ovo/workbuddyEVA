@@ -2,7 +2,7 @@
 
 用自有启动器把 **Wallpaper Engine** 的 Web / 视频 / Scene / 图片壁纸通过 **CDP 注入** 铺进 WorkBuddy，并在同一个控制面板里管理 WorkBuddy 的账号、会话、模型、增强与电源策略。没有独立的 Electron 窗口，也不打开浏览器：界面只在 WorkBuddy 页面里。启动时会自动唤起 WorkBuddy，WorkBuddy 退出后本程序随之退出。打包后的可执行文件名为 **`workbuddyEVA.exe`**。
 
-> **功能范围**：壁纸 + 注入壳 + 重写后的 WorkBuddy 管理面板（账号 / 会话 / 模型 / 增强 / 电脑 / 关于）。所有模块都是本仓库自有实现，WorkDaddy 源码只作协议与数据结构参考。**不迁移上游的主题（theme）与自带「关于」页**；「关于」页为本项目重新编写，面向使用者说明功能、用法与数据位置。
+> **功能范围**：壁纸 + 注入壳 + 重写后的 WorkBuddy 管理面板（账号 / 会话 / 模型 / 增强 / 电脑 / 关于）。所有模块都是本仓库自有实现。「关于」页面向使用者说明功能、用法与数据位置。
 
 ## 依赖
 
@@ -145,48 +145,10 @@ lib/wb-power.js        阻止休眠 / 立即休眠
 helpers/               交给 WorkBuddy 自带 Node 执行的外部脚本（登录密钥 / 会话 SQLite）
 public/                控制面板（iframe 嵌入）
 scene-live/            WebWallGL 渲染页
-assets/                品牌素材：asuka-sheet.png 原图、app.ico、切分后的图标
-tools/                 运行时源码固化、品牌图标切分、便携版与安装包打包
+assets/                应用图标与界面素材
+tools/                 运行时源码固化与构建脚本
 installer/             安装 / 卸载程序（安装包入口）
 ```
-
-## 品牌与打包
-
-- 品牌原图：`assets/asuka-sheet.png`（明日香 02 图标套装）。
-- 切分结果：`assets/app.ico`、`assets/app-icon.png`，以及 `assets/brand/` 与 `public/assets/brand/` 下的桌面图标、托盘头像和六种状态图标。
-- 重新生成图标：`npm run build:icons`（需要 Python 3 + Pillow）。
-- 打包可执行文件：
-
-```powershell
-npm run build:exe      # 便携版 dist/workbuddyEVA.exe
-npm run build:setup    # 安装包 dist/workbuddyEVA-Setup.exe（会一并重建便携版）
-```
-
-便携版是单个 exe，双击即启动，不弹控制台窗口（打包时把 PE 子系统改为 GUI）。安装包内嵌便携版，双击后可以选择安装目录与数据目录 → 复制到所选目录 → 写入 `data-path.txt` → 创建桌面 / 开始菜单快捷方式 → 写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\workbuddyEVA` 卸载项 → 启动程序。卸载时先把自身复制到临时目录再删除安装目录，因此 `Uninstall.exe` 可以把自己删干净；卸载过程会询问是否同时删除数据目录（默认保留）。
-
-安装包与便携版支持以下参数：
-
-```powershell
-# 静默安装到指定位置（数据目录放在 D 盘，装完不启动）
-workbuddyEVA-Setup.exe --install --silent --dir "D:\Apps\workbuddyEVA" --data "D:\workbuddyEVA-data" --no-start
-
-# 静默卸载并保留数据
-"C:\...\workbuddyEVA\Uninstall.exe" --uninstall --silent
-```
-
-两个 exe 的图标与版本信息都取自 `assets/app.ico` 与 `package.json`。打包流程见 [tools/pkg-build.js](tools/pkg-build.js)：先把图标写进 pkg 基础镜像，再让 `@yao-pkg/pkg` 追加应用快照，避免改图标时丢掉快照数据；安装包与便携版共用这段逻辑。
-
-默认目标为 Node 22 x64。若本机没有 Node 22 基础镜像（`pkg` 需要联网下载），脚本会自动退回已缓存的 Node 20 镜像；该产物功能一致，但读取会话库时会调用 WorkBuddy 自带的 Electron Node（`ELECTRON_RUN_AS_NODE`），因此必须安装 WorkBuddy。也可用环境变量指定目标：
-
-```powershell
-$env:PKG_TARGET = "node20-win-x64"; npm run build:exe
-```
-
-## 与 WorkDaddy 的关系
-
-本版本不使用 WorkDaddy 的任何代码或进程，也不随包分发其 `core/` 目录。账号、会话、模型、增强、电脑策略均为按本仓库结构重写的实现，上游仅作协议与数据结构参考。WorkDaddy 若仍在运行，两者可以同时注入 WorkBuddy，但会出现两套图标 / 面板，建议只保留 workbuddyEVA。
-
-明确不迁移的功能：上游的主题（theme）。本项目的「关于」页为使用者重新编写，不沿用上游内容。
 
 ## 常见问题
 
