@@ -1,0 +1,113 @@
+'use strict';
+
+// 在 Node 22+ 或 WorkBuddy 自带的 Electron Node 下运行，读写 workbuddy.db。
+// 只接受本程序构造的固定操作，不执行任意 SQL。
+const { DatabaseSync } = require('node:sqlite');
+
+const DB_PATH = process.env.WBWE_SESSION_DB || '';
+
+function placeholders(count) {
+  return new Array(count).fill('?').join(',');
+}
+
+function normalizeIds(value) {
+  const ids = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    const id = String(item || '').trim();
+    if (id && id.length <= 200 && !ids.includes(id)) ids.push(id);
+  }
+  return ids;
+}
+
+function run(input) {
+  if (!DB_PATH) throw new Error('缺少会话数据库路径');
+  const readOnly = input.op !== 'rename' && input.op !== 'softDelete'
+    && input.op !== 'restore' && input.op !== 'hardDelete';
+  const db = new DatabaseSync(DB_PATH, readOnly ? { readOnly: true } : {});
+  try {
+    if (input.op === 'list') {
+      const clauses = [];
+      const params = [];
+      if (!input.deleted) clauses.push('s.deleted_at IS NULL');
+      if (input.account) { clauses.push('s.user_id = ?'); params.push(String(input.account)); }
+      if (input.q) {
+        clauses.push('(s.title LIKE ? OR s.custom_title LIKE ? OR s.cwd LIKE ?)');
+        const like = '%' + String(input.q).slice(0, 120) + '%';
+        params.push(like, like, like);
+      }
+      const where = clauses.length ? ' WHERE ' + clauses.join(' AND ') : '';
+      const limit = Math.max(1, Math.min(500, Number(input.limit) || 200));
+      const rows = db.prepare(
+        'SELECT s.id, s.cwd, s.user_id, s.title, s.custom_title, s.status, s.created_at,'
+        + ' s.updated_at, s.last_activity_at, s.deleted_at, s.model, s.source_mode,'
+        + ' u.used, u.size'
+        + ' FROM sessions s LEFT JOIN session_usage u ON u.session_id = s.id'
+        + where + ' ORDER BY COALESCE(s.last_activity_at, s.updated_at, s.created_at) DESC LIMIT ?',
+      ).all(...params, limit);
+      const accounts = db.prepare(
+        'SELECT user_id AS uid, COUNT(*) AS count FROM sessions'
+        + ' WHERE deleted_at IS NULL GROUP BY user_id',
+      ).all();
+      return { rows: rows.map((row) => ({ ...row })), accounts: accounts.map((row) => ({ ...row })) };
+    }
+    if (input.op === 'get') {
+      const row = db.prepare('SELECT * FROM sessions WHERE id = ?').get(String(input.id || ''));
+      const usage = db.prepare('SELECT * FROM session_usage WHERE session_id = ?').get(String(input.id || ''));
+      return { row: row ? { ...row } : null, usage: usage ? { ...usage } : null };
+    }
+    if (input.op === 'rename') {
+      const id = String(input.id || '');
+      const title = String(input.title || '').slice(0, 300);
+      const result = db.prepare(
+        'UPDATE sessions SET custom_title = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL',
+      ).run(title || null, Date.now(), id);
+      return { changes: Number(result.changes) };
+    }
+    if (input.op === 'softDelete') {
+      const ids = normalizeIds(input.ids);
+      if (!ids.length) return { changes: 0 };
+      const now = Date.now();
+      const result = db.prepare(
+        'UPDATE sessions SET deleted_at = ?, updated_at = ? WHERE id IN (' + placeholders(ids.length) + ')',
+      ).run(now, now, ...ids);
+      return { changes: Number(result.changes) };
+    }
+    if (input.op === 'restore') {
+      const ids = normalizeIds(input.ids);
+      if (!ids.length) return { changes: 0 };
+      const result = db.prepare(
+        'UPDATE sessions SET deleted_at = NULL, updated_at = ? WHERE id IN (' + placeholders(ids.length) + ')',
+      ).run(Date.now(), ...ids);
+      return { changes: Number(result.changes) };
+    }
+    if (input.op === 'hardDelete') {
+      const ids = normalizeIds(input.ids);
+      if (!ids.length) return { changes: 0 };
+      const result = db.prepare(
+        'DELETE FROM sessions WHERE id IN (' + placeholders(ids.length) + ') AND deleted_at IS NOT NULL',
+      ).run(...ids);
+      return { changes: Number(result.changes) };
+    }
+    if (input.op === 'active') {
+      const row = db.prepare(
+        "SELECT COUNT(*) AS count FROM sessions WHERE deleted_at IS NULL AND status IN ('Working', 'Planning')",
+      ).get();
+      return { count: Number(row.count) || 0 };
+    }
+    throw new Error('未知操作: ' + String(input.op));
+  } finally {
+    db.close();
+  }
+}
+
+let text = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { text += chunk; });
+process.stdin.on('end', () => {
+  try {
+    const result = run(JSON.parse(text || '{}'));
+    process.stdout.write(JSON.stringify({ ok: true, result }));
+  } catch (error) {
+    process.stdout.write(JSON.stringify({ ok: false, error: error && error.message || String(error) }));
+  }
+});

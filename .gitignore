@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+.build/
+data/
+installer/payload/
+.testdata/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db

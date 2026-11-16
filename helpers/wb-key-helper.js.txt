@@ -1,0 +1,20 @@
+'use strict';
+
+// 以 ELECTRON_RUN_AS_NODE=1 方式由 WorkBuddy 主程序执行，读取其原生存储绑定的
+// 静态密钥负载。密钥只写 stdout，由父进程内存持有，不落盘、不写日志。
+const crypto = require('crypto');
+
+try {
+  const binding = process._linkedBinding('electron_browser_workbuddy_storage');
+  const payload = JSON.parse(binding.loggerGet());
+  if (payload && payload.version === 1 && typeof payload.atRestSecretKey === 'string') {
+    const key = crypto.createHash('sha256').update(payload.atRestSecretKey, 'utf8').digest();
+    process.stdout.write('WBWE_KEY ' + key.toString('base64') + '\n');
+    process.exit(0);
+  }
+  process.stderr.write('unexpected storage payload');
+  process.exit(4);
+} catch (error) {
+  process.stderr.write(String((error && error.message) || error).slice(0, 200));
+  process.exit(3);
+}

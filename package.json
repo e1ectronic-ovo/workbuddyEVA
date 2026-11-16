@@ -1,0 +1,44 @@
+{
+  "name": "workbuddy-eva",
+  "productName": "workbuddyEVA",
+  "version": "5.0.0",
+  "private": true,
+  "description": "workbuddyEVA：自有启动器与 CDP 注入壳，把 Wallpaper Engine 壁纸铺进 WorkBuddy，随 WorkBuddy 启停",
+  "main": "app/daemon.js",
+  "bin": "app/daemon.js",
+  "scripts": {
+    "start": "cmd /c start.cmd",
+    "start:daemon": "node app/daemon.js",
+    "start:panel": "node server.js",
+    "build:runtime": "node tools/build-runtime-source.js",
+    "build:icons": "python tools/build-brand-icons.py",
+    "build:exe": "node tools/build-runtime-source.js && node tools/build-exe.js",
+    "build:setup": "node tools/build-runtime-source.js && node tools/build-setup.js --build-app",
+    "build:release": "npm run build:setup"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "assets/**/*",
+      "scene-live/**/*",
+      "node_modules/webwallgl/**/*",
+      "lib/runtime-source.js",
+      "helpers/**/*"
+    ],
+    "scripts": [
+      "app/**/*.js",
+      "lib/**/*.js",
+      "server.js"
+    ]
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "webwallgl": "^3.0.2",
+    "ws": "^8.23.0"
+  },
+  "devDependencies": {
+    "resedit": "^3.1.1"
+  }
+}

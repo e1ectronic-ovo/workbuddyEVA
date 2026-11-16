@@ -1,0 +1,15 @@
+{
+  "name": "workbuddy-eva-setup",
+  "productName": "workbuddyEVA Setup",
+  "version": "5.0.0",
+  "private": true,
+  "description": "workbuddyEVA 安装程序",
+  "main": "main.js",
+  "bin": "main.js",
+  "pkg": {
+    "assets": [
+      "payload/**/*",
+      "meta.json"
+    ]
+  }
+}

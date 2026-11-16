@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scene Wallpaper</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #050506; overflow: hidden; }
+  #wp { position: fixed; inset: 0; }
+  #wp canvas { display: block; width: 100%; height: 100%; }
+  #status {
+    position: fixed; left: 0; right: 0; bottom: 12px; text-align: center;
+    color: rgba(255, 255, 255, .5); font: 12px/1.4 "Segoe UI", system-ui, sans-serif;
+    pointer-events: none; transition: opacity .4s ease;
+  }
+</style>
+</head>
+<body>
+<div id="wp"></div>
+<div id="status">正在解析 scene.pkg…</div>
+<script src="/scene-engine/webwallgl.global.min.js"></script>
+<script src="/scene-live/renderer.js"></script>
+</body>
+</html>

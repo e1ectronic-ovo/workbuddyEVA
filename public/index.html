@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workbuddyEVA · WorkBuddy</title>
+<link rel="icon" type="image/png" href="/assets/brand/logo.png">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="window" id="appWindow">
+  <header class="titlebar">
+    <div class="traffic">
+      <button class="light close" id="btnClose" type="button" title="关闭"></button>
+      <button class="light min" id="btnMin" type="button" title="最小化"></button>
+      <button class="light zoom" id="btnZoom" type="button" title="全屏"></button>
+    </div>
+    <div class="titlebar-center">
+      <span class="titlebar-title">workbuddyEVA</span>
+      <span class="titlebar-sub">WORKBUDDY · EVA</span>
+    </div>
+    <div class="titlebar-right">
+      <button class="status-pill" id="status" type="button" title="连接状态">
+        <img class="status-avatar" id="statusIcon" src="/assets/brand/state-busy.png" alt="">
+        <span id="statusText">连接中…</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="window-body">
+    <nav class="sidebar" id="nav">
+      <div class="sidebar-brand">
+        <img class="sidebar-brand-icon" src="/assets/brand/app.png" alt="">
+        <div class="sidebar-brand-text">
+          <strong>workbuddyEVA</strong>
+          <span>EVA · 02</span>
+        </div>
+      </div>
+      <div class="sidebar-scroll">
+        <p class="sidebar-label">WorkBuddy</p>
+        <button class="nav-item" data-pane="accounts" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.4" r="3.4"/><path d="M5 19.4c.7-3.2 3.5-5 7-5s6.3 1.8 7 5"/></svg></span>
+          <span>账号</span>
+        </button>
+        <button class="nav-item" data-pane="sessions" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 12.6a7.8 7.8 0 0 1-8.4 7.6 8.6 8.6 0 0 1-3.2-.6L4.2 21l1.2-4.1a7.6 7.6 0 0 1-.8-3.5A7.8 7.8 0 0 1 12.4 5a8.6 8.6 0 0 1 8 7.6Z"/></svg></span>
+          <span>会话</span>
+        </button>
+        <button class="nav-item" data-pane="models" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M9.5 3v2.4M14.5 3v2.4M9.5 18.6V21M14.5 18.6V21M3 9.5h2.4M3 14.5h2.4M18.6 9.5H21M18.6 14.5H21"/></svg></span>
+          <span>模型</span>
+        </button>
+        <button class="nav-item" data-pane="enhance" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 1.7 4.6 4.6 1.7-4.6 1.7L12 15.6l-1.7-4.6L5.7 9.3l4.6-1.7Z"/><path d="m18.6 15 .8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8Z"/></svg></span>
+          <span>增强</span>
+        </button>
+
+        <p class="sidebar-label">壁纸</p>
+        <button class="nav-item active" data-pane="library" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg></span>
+          <span>壁纸库</span>
+        </button>
+
+        <p class="sidebar-label">调整</p>
+        <button class="nav-item" data-pane="appearance" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><circle cx="8.2" cy="9.6" r="1.1" fill="currentColor" stroke="none"/><circle cx="12" cy="7.6" r="1.1" fill="currentColor" stroke="none"/><circle cx="15.6" cy="10.2" r="1.1" fill="currentColor" stroke="none"/></svg></span>
+          <span>外观</span>
+        </button>
+        <button class="nav-item" data-pane="playback" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M10.4 9.2 15.6 12l-5.2 2.8z" fill="currentColor" stroke="none"/></svg></span>
+          <span>播放</span>
+        </button>
+        <button class="nav-item" data-pane="rotation" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20.4 4.4v5h-5"/></svg></span>
+          <span>自动轮播</span>
+        </button>
+
+        <p class="sidebar-label">资源</p>
+        <button class="nav-item" data-pane="roots" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg></span>
+          <span>壁纸目录</span>
+        </button>
+        <button class="nav-item" data-pane="presets" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M18 7h2M4 17h3M11 17h9"/><circle cx="15.2" cy="7" r="2"/><circle cx="8.2" cy="17" r="2"/></svg></span>
+          <span>预设</span>
+        </button>
+
+        <p class="sidebar-label">系统</p>
+        <button class="nav-item" data-pane="power" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M7.2 5.8a8 8 0 1 0 9.6 0"/></svg></span>
+          <span>电脑</span>
+        </button>
+        <button class="nav-item" data-pane="connection" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.6"/><path d="M12 11.4v5"/><circle cx="12" cy="8" r="1.1" fill="currentColor" stroke="none"/></svg></span>
+          <span>连接</span>
+        </button>
+        <button class="nav-item" data-pane="about" type="button">
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 21 20H3Z"/><path d="M12 9.6v4.6"/><circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/></svg></span>
+          <span>关于</span>
+        </button>
+      </div>
+      <footer class="sidebar-foot">
+        <span class="foot-dot"></span>
+        <span>本机服务 · 127.0.0.1</span>
+      </footer>
+    </nav>
+
+    <main class="content">
+      <section class="pane" data-pane="accounts">
+        <div class="pane-head">
+          <h2>账号</h2>
+          <p>备份登录态、切换或新增账号；打开面板时自动查询额度与今日签到。</p>
+        </div>
+        <div class="wb-current" id="wbCurrent">
+          <div class="wb-current-avatar" id="wbCurrentAvatar">—</div>
+          <div class="wb-current-text">
+            <strong id="wbCurrentName">读取中…</strong>
+            <span id="wbCurrentMeta">正在读取 WorkBuddy 登录信息</span>
+            <span id="wbCurrentCheckin">今日签到 —</span>
+          </div>
+          <span class="wb-current-credits" id="wbCurrentCredits">额度 —</span>
+        </div>
+        <div class="toolbar">
+          <button class="btn primary" id="wbBackupBtn" type="button">备份当前账号</button>
+          <button class="btn" id="wbCheckinBtn" type="button">签到</button>
+          <button class="btn quiet" id="wbAddAccount" type="button">新增账号</button>
+          <button class="btn quiet" id="wbAccountsRefresh" type="button">刷新账号</button>
+          <span class="hint" id="wbAccountsHint">打开面板时自动查询额度与今日签到</span>
+        </div>
+        <div class="wb-list" id="wbAccounts"></div>
+      </section>
+
+      <section class="pane" data-pane="models">
+        <div class="pane-head">
+          <h2>模型</h2>
+          <p>管理写入 models.json 的自定义模型；官方模型仍由 WorkBuddy 服务端下发。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row column">
+              <div class="wb-form-grid">
+                <label class="wb-field">名称<input id="wbModelName" type="text" placeholder="例如 GLM-5.3-Flash"></label>
+                <label class="wb-field">模型 ID<input id="wbModelId" type="text" placeholder="模型标识"></label>
+                <label class="wb-field">供应商<input id="wbModelVendor" type="text" value="Custom"></label>
+                <label class="wb-field wb-span2">接口地址<input id="wbModelUrl" type="text" placeholder="https://api.example.com/v1"></label>
+                <label class="wb-field wb-span2">API Key<input id="wbModelKey" type="password" placeholder="编辑时留空表示不修改"></label>
+              </div>
+              <div class="wb-form-foot">
+                <label class="wb-check"><input type="checkbox" id="wbModelToolCall">支持工具调用</label>
+                <label class="wb-check"><input type="checkbox" id="wbModelImages">支持图片</label>
+                <label class="wb-check"><input type="checkbox" id="wbModelReasoning">支持推理</label>
+                <span class="wb-form-actions">
+                  <button class="btn primary" id="wbModelSave" type="button">保存模型</button>
+                  <button class="btn quiet" id="wbModelReset" type="button">清空</button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="wb-list" id="wbModels"></div>
+      </section>
+
+      <section class="pane" data-pane="sessions">
+        <div class="pane-head">
+          <h2>会话</h2>
+          <p>浏览 WorkBuddy 聊天记录，自动同步，支持搜索、单个或批量导出、重命名与清理。</p>
+        </div>
+        <div class="toolbar">
+          <label class="search-field" for="wbSessionSearch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.4"/><path d="m15.8 15.8 4.4 4.4"/></svg>
+            <input id="wbSessionSearch" type="search" placeholder="搜索标题或目录" autocomplete="off" spellcheck="false">
+          </label>
+          <select id="wbSessionAccount">
+            <option value="">全部账号</option>
+          </select>
+          <label class="wb-check"><input type="checkbox" id="wbSessionDeleted">显示已删除</label>
+          <label class="wb-check"><input type="checkbox" id="wbSessionAll">全选</label>
+          <button class="btn quiet" id="wbSessionsExport" type="button" disabled>导出所选</button>
+          <button class="btn quiet" id="wbSessionsRefresh" type="button">刷新</button>
+          <span class="hint" id="wbSessionsSynced">自动同步中</span>
+        </div>
+        <div class="wb-list" id="wbSessions"></div>
+      </section>
+
+      <section class="pane" data-pane="enhance">
+        <div class="pane-head">
+          <h2>增强</h2>
+          <p>免打扰与自动继续，选项会实时下发到 WorkBuddy 窗口。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">免打扰</span>
+                <span class="row-desc">屏蔽 WorkBuddy 的桌面通知</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="wbEnhanceDnd"><i></i></label>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">自动继续</span>
+                <span class="row-desc">会话出现「继续 / 重试」按钮时自动点击</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="wbEnhanceAuto"><i></i></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="power">
+        <div class="pane-head">
+          <h2>电脑</h2>
+          <p>控制长时间任务期间的休眠与屏幕唤醒策略。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">电源模式</span>
+                <span class="row-desc" id="wbPowerState">读取中…</span>
+              </div>
+              <select id="wbPowerMode">
+                <option value="allow">允许休眠</option>
+                <option value="keep">保持唤醒</option>
+                <option value="until-done">任务结束后解除</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">允许显示器休眠</span>
+                <span class="row-desc">关闭时屏幕也保持常亮</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="wbPowerDisplay"><i></i></label>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">立即休眠</span>
+                <span class="row-desc">请先保存工作，再让电脑进入睡眠</span>
+              </div>
+              <button class="btn" id="wbPowerSleep" type="button">休眠</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane active" data-pane="library">
+        <div class="pane-head">
+          <h2>壁纸库</h2>
+          <span class="head-count" id="count">—</span>
+        </div>
+
+        <div class="toolbar">
+          <label class="search-field" for="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.4"/><path d="m15.8 15.8 4.4 4.4"/></svg>
+            <input id="search" type="search" placeholder="搜索壁纸" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="toolbar-actions">
+            <button class="btn primary" id="addWallpaper" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg>
+              添加壁纸
+            </button>
+            <button class="icon-btn" id="refresh" type="button" title="刷新壁纸库">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20.4 4.4v5h-5"/></svg>
+            </button>
+            <button class="btn quiet" id="clear" type="button" title="只移除壁纸层，不删除文件">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9.5 7V4.8h5V7"/><path d="m6.8 7 .9 12h8.6l.9-12"/></svg>
+              清除壁纸
+            </button>
+            <input type="file" id="filePicker" accept="image/*,video/*" multiple hidden>
+          </div>
+        </div>
+
+        <div class="filter-bar">
+          <div class="segmented" id="chips" role="tablist" aria-label="壁纸类型">
+            <button class="active" data-type="all" type="button">全部</button>
+            <button data-type="custom" type="button">自定义</button>
+            <button data-type="video" type="button">视频</button>
+            <button data-type="web" type="button">网页</button>
+            <button data-type="scene" type="button">Scene</button>
+            <button data-type="image" type="button">图片</button>
+            <button data-type="hidden" type="button">已隐藏</button>
+          </div>
+          <span class="hint" id="hint">点击卡片即应用 · 也可以把图片或视频拖进来</span>
+        </div>
+
+        <div class="grid" id="grid"></div>
+      </section>
+
+      <section class="pane" data-pane="appearance">
+        <div class="pane-head">
+          <h2>外观</h2>
+          <p>控制壁纸与 WorkBuddy 界面的融合方式。</p>
+        </div>
+        <div class="settings">
+          <p class="group-label">壁纸显示</p>
+          <div class="group">
+            <div class="row column">
+              <div class="row-main">
+                <div class="row-text">
+                  <span class="row-title">暗色遮罩</span>
+                  <span class="row-desc">数值越高文字越清晰，壁纸也越暗</span>
+                </div>
+                <span class="row-value" id="maskVal">0.25</span>
+              </div>
+              <input type="range" id="mask" min="0" max="0.9" step="0.05" value="0.25">
+            </div>
+            <div class="row column">
+              <div class="row-main">
+                <div class="row-text">
+                  <span class="row-title">壁纸模糊</span>
+                  <span class="row-desc">深色或花哨的壁纸建议 8–16 px</span>
+                </div>
+                <span class="row-value" id="blurVal">0 px</span>
+              </div>
+              <input type="range" id="blur" min="0" max="40" step="1" value="0">
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">填充方式</span>
+                <span class="row-desc">壁纸与窗口比例的适配策略</span>
+              </div>
+              <select id="fit">
+                <option value="cover">裁剪铺满</option>
+                <option value="contain">完整显示</option>
+                <option value="stretch">拉伸</option>
+              </select>
+            </div>
+          </div>
+
+          <p class="group-label">界面</p>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">液态玻璃</span>
+                <span class="row-desc">让面板与侧边栏半透明，透出壁纸</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="glass" checked><i></i></label>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">性能模式</span>
+                <span class="row-desc">关闭 WorkBuddy 界面的毛玻璃，显著提升帧率</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="perf" checked><i></i></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="playback">
+        <div class="pane-head">
+          <h2>播放</h2>
+          <p>视频与 Scene 壁纸的播放参数。</p>
+        </div>
+        <div class="settings">
+          <p class="group-label">视频壁纸</p>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">切换过渡</span>
+                <span class="row-desc">切换壁纸时的淡入淡出时长</span>
+              </div>
+              <select id="transition">
+                <option value="0">无过渡</option>
+                <option value="0.2">0.2 秒</option>
+                <option value="0.4">0.4 秒</option>
+                <option value="0.6">0.6 秒</option>
+                <option value="1">1.0 秒</option>
+                <option value="1.5">1.5 秒</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">播放速度</span>
+                <span class="row-desc">只影响视频壁纸的播放速率</span>
+              </div>
+              <select id="videoRate">
+                <option value="0.5">0.5×</option>
+                <option value="0.75">0.75×</option>
+                <option value="1">1×</option>
+                <option value="1.25">1.25×</option>
+                <option value="1.5">1.5×</option>
+                <option value="2">2×</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">视频声音</span>
+                <span class="row-desc">部分视频壁纸自带音轨</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="audio"><i></i></label>
+            </div>
+          </div>
+
+          <p class="group-label">Scene 壁纸</p>
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">渲染帧率</span>
+                <span class="row-desc">只影响 WebGL 实时渲染的 Scene</span>
+              </div>
+              <select id="sceneFps">
+                <option value="30">30 fps</option>
+                <option value="60">60 fps</option>
+                <option value="90">90 fps</option>
+                <option value="120">120 fps</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">鼠标视差</span>
+                <span class="row-desc">转发鼠标位置与点击，保留壁纸自带的交互</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="parallax" checked><i></i></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="rotation">
+        <div class="pane-head">
+          <h2>自动轮播</h2>
+          <p>按时间间隔自动切换到壁纸库里的下一张。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">自动轮播</span>
+                <span class="row-desc">被隐藏的壁纸不会参与轮播</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="rotationEnabled"><i></i></label>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">轮播间隔</span>
+                <span class="row-desc">到点后自动切到下一张壁纸</span>
+              </div>
+              <select id="rotationMinutes">
+                <option value="5">5 分钟</option>
+                <option value="10">10 分钟</option>
+                <option value="15">15 分钟</option>
+                <option value="30">30 分钟</option>
+                <option value="60">1 小时</option>
+                <option value="120">2 小时</option>
+              </select>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">随机顺序</span>
+                <span class="row-desc">关闭后按壁纸库顺序循环</span>
+              </div>
+              <label class="switch"><input type="checkbox" id="rotationShuffle" checked><i></i></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="roots">
+        <div class="pane-head">
+          <h2>壁纸目录</h2>
+          <p>扫描 Wallpaper Engine 工程目录，可以添加多个位置。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="roots" id="roots"></div>
+          </div>
+          <div class="inline-form">
+            <input id="rootInput" type="text" placeholder="D:\WallpaperEngine\projects" spellcheck="false">
+            <button class="btn" id="rootAdd" type="button">添加</button>
+          </div>
+          <p class="hint-block">默认会扫描 Steam 工坊的 431960 目录；自定义路径适合摆放本地工程。</p>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="presets">
+        <div class="pane-head">
+          <h2>预设</h2>
+          <p>把外观、轮播、目录与隐藏列表保存为 JSON，方便备份或换机。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">导出预设</span>
+                <span class="row-desc">保存当前全部设置到一个 JSON 文件</span>
+              </div>
+              <button class="btn" id="presetExport" type="button">导出</button>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">导入预设</span>
+                <span class="row-desc">从 JSON 文件恢复外观、轮播与目录</span>
+              </div>
+              <button class="btn" id="presetImport" type="button">导入</button>
+            </div>
+          </div>
+          <input type="file" id="presetPicker" accept="application/json,.json" hidden>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="connection">
+        <div class="pane-head">
+          <h2>连接</h2>
+          <p>壁纸层通过本程序开启的 CDP 调试通道注入 WorkBuddy。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">WorkBuddy</span>
+                <span class="row-desc" id="cdpInfo">CDP —</span>
+              </div>
+              <span class="row-value" id="connState">未连接</span>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">硬件加速</span>
+                <span class="row-desc" id="gpuNote">等待连接后检测</span>
+              </div>
+              <span class="row-value" id="gpuState">—</span>
+            </div>
+            <div class="row" id="relaunchRow" style="display:none">
+              <div class="row-text">
+                <span class="row-title">重新接管</span>
+                <span class="row-desc">带调试端口重启 WorkBuddy，聊天记录会保留</span>
+              </div>
+              <button class="btn" id="relaunch" type="button">重启</button>
+            </div>
+            <div class="row">
+              <div class="row-text">
+                <span class="row-title">退出本程序</span>
+                <span class="row-desc">停止壁纸服务，并撤掉 WorkBuddy 里的壁纸层与桌面图标</span>
+              </div>
+              <button class="btn danger" id="quitApp" type="button">退出</button>
+            </div>
+          </div>
+          <p class="note">WorkBuddy 窗口右下角常驻一个桌面图标，点击即可打开这个控制面板。WorkBuddy 退出后本程序会随之退出。</p>
+          <p class="note">Scene 壁纸由 WebWallGL 实时渲染（WebGL），支持视差与自带交互；渲染失败时会自动回落到预览图。</p>
+        </div>
+      </section>
+
+      <section class="pane" data-pane="about">
+        <div class="pane-head">
+          <h2>关于 workbuddyEVA</h2>
+          <p>用法、数据存放位置与版本信息。</p>
+        </div>
+        <div class="settings">
+          <div class="group">
+            <div class="row column">
+              <div class="row-text">
+                <span class="row-title">这是什么</span>
+                <p class="about-text">workbuddyEVA 是 WorkBuddy 的本地小工具：把 Wallpaper Engine 的壁纸显示在 WorkBuddy 背景里，同时把账号、会话、模型、免打扰和电源设置集中到一个面板。它不会打开浏览器，也不会多开一个窗口，跟着 WorkBuddy 一起启动和退出。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="row column">
+              <div class="row-text">
+                <span class="row-title">怎么用</span>
+                <p class="about-desc">正常启动 WorkBuddy 即可，workbuddyEVA 会自动一起打开。WorkBuddy 右下角有一个图标，点开就是控制面板。</p>
+              </div>
+              <div class="about-grid">
+                <div class="about-card">
+                  <strong>壁纸</strong>
+                  <p>从 Wallpaper Engine 的库里挑一张壁纸，调整外观、播放方式与自动轮播。</p>
+                </div>
+                <div class="about-card">
+                  <strong>账号</strong>
+                  <p>备份和切换 WorkBuddy 账号，查看剩余额度，顺手完成每日签到。</p>
+                </div>
+                <div class="about-card">
+                  <strong>会话</strong>
+                  <p>搜索聊天记录，重命名、导出，或清理不再需要的会话。</p>
+                </div>
+                <div class="about-card">
+                  <strong>其他</strong>
+                  <p>管理自定义模型，开启免打扰和自动继续，控制长时间任务时的电脑休眠。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="row column">
+              <div class="row-text">
+                <span class="row-title">你的数据</span>
+                <p class="about-text">所有数据都只保存在这台电脑上，不会上传。壁纸设置、账号备份、会话索引和日志都放在下面的数据目录里；修改账号或会话之前会自动备份，方便随时恢复。想换位置时，退出程序后编辑安装目录里的 <code>data-path.txt</code> 即可。</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="group">
+            <div class="row column">
+              <div class="row-text">
+                <span class="row-title">版本与运行信息</span>
+                <p class="about-desc" id="wbAboutMeta">读取中…</p>
+              </div>
+            </div>
+          </div>
+
+          <p class="note">workbuddyEVA 是非官方工具，与 WorkBuddy、Wallpaper Engine 及《新世纪福音战士》版权方没有隶属关系，角色素材仅用于本机个性化。切换账号或清理会话前，请确认重要内容已经备份。</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<div class="sheet-backdrop" id="sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-icon" id="sheetIcon"></div>
+    <h3 id="sheetTitle"></h3>
+    <p id="sheetMsg"></p>
+    <input class="sheet-input" id="sheetInput" type="text" hidden>
+    <div class="sheet-actions">
+      <button class="btn" id="sheetCancel" type="button">取消</button>
+      <button class="btn primary" id="sheetOk" type="button">好</button>
+    </div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
