@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-eva-setup",
   "productName": "workbuddyEVA Setup",
-  "version": "5.0.1",
+  "version": "5.0.2",
   "private": true,
   "description": "workbuddyEVA 安装程序",
   "main": "main.js",

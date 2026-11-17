@@ -564,6 +564,17 @@ async function handleApi(req, res, url) {
       notice: notice && Date.now() - noticeAt < 60000 ? notice : '',
     });
   }
+  // 注入层在会话末尾展示的用量汇总：积分取 session_usage，Token 取转录用量
+  if (req.method === 'GET' && p === '/api/session-usage') {
+    if (!checkToken(url)) return json(res, 403, { ok: false, error: '无效的访问令牌' });
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,200}$/.test(id)) return json(res, 400, { ok: false, error: '无效的会话 ID' });
+    try {
+      return json(res, 200, Object.assign({ ok: true }, await wbSessions.usageSummary(id)));
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
   if (req.method === 'GET' && p === '/api/nav') {
     if (!checkToken(url)) return json(res, 403, { error: '无效的访问令牌' });
     const dir = url.searchParams.get('dir') === 'prev' ? 'prev' : 'next';
