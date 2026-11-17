@@ -78,6 +78,11 @@ const el = {
   wbSessionsRefresh: document.getElementById('wbSessionsRefresh'),
   wbSessions: document.getElementById('wbSessions'),
   wbAboutMeta: document.getElementById('wbAboutMeta'),
+  wbUpdateStatus: document.getElementById('wbUpdateStatus'),
+  wbUpdateNotes: document.getElementById('wbUpdateNotes'),
+  wbUpdateCheck: document.getElementById('wbUpdateCheck'),
+  wbUpdateDownload: document.getElementById('wbUpdateDownload'),
+  wbUpdateInstall: document.getElementById('wbUpdateInstall'),
   wbEnhanceDnd: document.getElementById('wbEnhanceDnd'),
   wbEnhanceAuto: document.getElementById('wbEnhanceAuto'),
   wbPowerState: document.getElementById('wbPowerState'),
@@ -1605,6 +1610,126 @@ el.wbPowerSleep.addEventListener('click', async () => {
 
 // ---------- 关于 ----------
 let wbAboutLoading = false;
+let wbUpdateInfo = null;
+let wbUpdateChecking = false;
+let wbUpdatePolling = false;
+
+function fmtBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (!n) return '';
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+  if (n >= 1024) return Math.round(n / 1024) + ' KB';
+  return n + ' B';
+}
+
+function formatNotes(body) {
+  const raw = String(body || '').trim();
+  if (!raw) return '';
+  return esc(raw).split(/\r?\n/).map((line) => {
+    let out = line
+      .replace(/^#{1,3}\s+(.*)$/, '<b>$1</b>')
+      .replace(/^\s*[-*]\s+/, '• ')
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+    return out;
+  }).join('\n');
+}
+
+function renderUpdateInfo(info) {
+  wbUpdateInfo = info;
+  el.wbUpdateNotes.hidden = true;
+  el.wbUpdateDownload.hidden = true;
+  el.wbUpdateDownload.disabled = false;
+  el.wbUpdateInstall.hidden = true;
+  el.wbUpdateInstall.disabled = false;
+  const notes = formatNotes(info.notes);
+  if (info.hasUpdate) {
+    const when = info.publishedAt ? new Date(info.publishedAt) : null;
+    el.wbUpdateStatus.textContent = '发现新版本 ' + info.latest + '（当前 ' + info.current + '）'
+      + (when && !isNaN(when) ? ' · 发布于 ' + when.toLocaleDateString('zh-CN') : '');
+    if (notes) {
+      el.wbUpdateNotes.innerHTML = '<span class="about-tag">' + esc(info.name || ('v' + info.latest)) + '</span>\n'
+        + notes;
+      el.wbUpdateNotes.hidden = false;
+    }
+    if (info.download) {
+      el.wbUpdateDownload.textContent = '下载更新' + (info.download.size
+        ? '（' + fmtBytes(info.download.size) + '）' : '');
+      el.wbUpdateDownload.hidden = false;
+    } else {
+      el.wbUpdateStatus.textContent += '（该版本没有可下载的安装包）';
+    }
+  } else {
+    el.wbUpdateStatus.textContent = info.latest && info.latest !== info.current
+      ? '当前版本 ' + info.current + '，GitHub 上的最新发布为 ' + info.latest + '。'
+      : '当前已是最新版本 ' + info.current + '。';
+    if (notes) {
+      el.wbUpdateNotes.innerHTML = '<span class="about-tag">' + esc(info.name || ('v' + info.latest)) + '</span>\n'
+        + notes;
+      el.wbUpdateNotes.hidden = false;
+    }
+  }
+}
+
+function renderUpdateDownload(d) {
+  if (!d) return;
+  if (d.state === 'downloading') {
+    const total = Number(d.total) || 0;
+    const pct = total ? Math.min(100, Math.round((Number(d.received) || 0) / total * 100)) : 0;
+    el.wbUpdateStatus.textContent = total
+      ? '正在下载更新 ' + pct + '%（' + fmtBytes(d.received) + ' / ' + fmtBytes(total) + '）…'
+      : '正在下载更新 ' + fmtBytes(d.received) + '…';
+    el.wbUpdateDownload.hidden = true;
+    el.wbUpdateInstall.hidden = true;
+  } else if (d.state === 'done') {
+    el.wbUpdateStatus.textContent = '更新已下载并通过校验：' + (d.name || '安装包')
+      + '。运行安装程序会先退出 workbuddyEVA，安装完成后自动重新启动。';
+    el.wbUpdateDownload.hidden = true;
+    el.wbUpdateDownload.disabled = false;
+    el.wbUpdateInstall.hidden = false;
+    el.wbUpdateInstall.disabled = false;
+  } else if (d.state === 'error') {
+    el.wbUpdateStatus.textContent = '下载失败：' + (d.error || '未知错误');
+    el.wbUpdateDownload.hidden = false;
+    el.wbUpdateDownload.disabled = false;
+    el.wbUpdateInstall.hidden = true;
+  }
+}
+
+async function pollUpdateDownload() {
+  if (wbUpdatePolling) return;
+  wbUpdatePolling = true;
+  const tick = async () => {
+    let d = null;
+    try { d = (await api('/api/update/download')).download; } catch (_) {
+      wbUpdatePolling = false;
+      return;
+    }
+    renderUpdateDownload(d);
+    if (d && d.state === 'downloading') setTimeout(tick, 700);
+    else wbUpdatePolling = false;
+  };
+  tick();
+}
+
+async function checkWbUpdate(force) {
+  if (wbUpdateChecking) return;
+  wbUpdateChecking = true;
+  wbUpdateInfo = null;
+  el.wbUpdateCheck.disabled = true;
+  el.wbUpdateStatus.textContent = '正在检查 GitHub 上的最新版本…';
+  el.wbUpdateNotes.hidden = true;
+  el.wbUpdateDownload.hidden = true;
+  el.wbUpdateInstall.hidden = true;
+  try {
+    renderUpdateInfo(await api('/api/update' + (force ? '?force=1' : '')));
+  } catch (err) {
+    el.wbUpdateStatus.textContent = '检查更新失败：' + err.message;
+  } finally {
+    wbUpdateChecking = false;
+    el.wbUpdateCheck.disabled = false;
+  }
+}
 
 async function loadWbAbout() {
   if (wbAboutLoading) return;
@@ -1621,7 +1746,50 @@ async function loadWbAbout() {
   } finally {
     wbAboutLoading = false;
   }
+  checkWbUpdate(false);
 }
+
+el.wbUpdateCheck.addEventListener('click', () => checkWbUpdate(true));
+
+el.wbUpdateDownload.addEventListener('click', async () => {
+  if (!wbUpdateInfo || !wbUpdateInfo.hasUpdate) return;
+  const size = wbUpdateInfo.download && wbUpdateInfo.download.size
+    ? '（约 ' + fmtBytes(wbUpdateInfo.download.size) + '）' : '';
+  const ok = await confirmSheet({
+    title: '下载更新',
+    message: '将从 GitHub 下载 workbuddyEVA ' + wbUpdateInfo.latest + ' 的安装包' + size
+      + '，保存到数据目录下的 updates 文件夹。下载完成后由你决定是否安装。现在开始下载吗？',
+    icon: 'restart',
+  });
+  if (!ok) return;
+  el.wbUpdateDownload.disabled = true;
+  el.wbUpdateStatus.textContent = '正在连接 GitHub 下载更新…';
+  try {
+    const data = await api('/api/update/download', {});
+    renderUpdateDownload(data.download);
+    pollUpdateDownload();
+  } catch (err) {
+    el.wbUpdateStatus.textContent = '下载失败：' + err.message;
+    el.wbUpdateDownload.disabled = false;
+  }
+});
+
+el.wbUpdateInstall.addEventListener('click', async () => {
+  const ok = await confirmSheet({
+    title: '安装更新',
+    message: '安装程序会先退出 workbuddyEVA，把程序更新为新版本后自动重新启动；壁纸配置与账号数据会保留。现在运行安装程序吗？',
+    icon: 'restart',
+  });
+  if (!ok) return;
+  el.wbUpdateInstall.disabled = true;
+  try {
+    await api('/api/update/install', {});
+    toast('安装程序已启动，请按提示完成更新');
+  } catch (err) {
+    el.wbUpdateInstall.disabled = false;
+    toast(err.message, true);
+  }
+});
 
 // ---------- 对话框 / 快捷键 ----------
 el.sheetOk.addEventListener('click', () => {

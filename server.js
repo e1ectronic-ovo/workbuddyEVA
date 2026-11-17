@@ -23,6 +23,7 @@ const wbModels = require('./lib/wb-models');
 const wbSessions = require('./lib/wb-sessions');
 const wbEnhance = require('./lib/wb-enhance');
 const wbPower = require('./lib/wb-power');
+const updateCheck = require('./lib/update-check');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SCENE_LIVE_DIR = path.join(__dirname, 'scene-live');
@@ -890,6 +891,32 @@ async function handleApi(req, res, url) {
       panel: base,
       startedAt: STARTED_AT,
     });
+  }
+  // ---- 版本更新 ----
+  if (req.method === 'GET' && p === '/api/update') {
+    try {
+      const info = await updateCheck.check(url.searchParams.get('force') === '1');
+      return json(res, 200, Object.assign({ ok: true }, info));
+    } catch (err) {
+      return json(res, 502, { ok: false, error: err.message });
+    }
+  }
+  if (req.method === 'POST' && p === '/api/update/download') {
+    try {
+      return json(res, 200, { ok: true, download: await updateCheck.startDownload() });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+  if (req.method === 'GET' && p === '/api/update/download') {
+    return json(res, 200, { ok: true, download: updateCheck.downloadState() });
+  }
+  if (req.method === 'POST' && p === '/api/update/install') {
+    try {
+      return json(res, 200, { ok: true, started: updateCheck.install() });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
   }
   // ---- WorkBuddy 增强 ----
   if (req.method === 'GET' && p === '/api/wb/enhance') {
