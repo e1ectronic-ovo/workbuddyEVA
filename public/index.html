@@ -179,6 +179,17 @@
           <button class="btn quiet" id="wbSessionsRefresh" type="button">刷新</button>
           <span class="hint" id="wbSessionsSynced">自动同步中</span>
         </div>
+        <div class="toolbar">
+          <select id="wbSessionsTarget" title="同步 / 导入的目标账号">
+            <option value="">目标账号：当前账号</option>
+          </select>
+          <button class="btn quiet" id="wbSessionsSync" type="button" disabled>同步所选</button>
+          <span class="hint" id="wbSessionsSyncHint">把所选会话（含消息记录）复制到目标账号</span>
+          <span class="toolbar-actions">
+            <input type="file" id="wbSessionsImportFile" accept=".json,application/json" hidden>
+            <button class="btn quiet" id="wbSessionsImport" type="button">导入会话</button>
+          </span>
+        </div>
         <div class="wb-list" id="wbSessions"></div>
       </section>
 

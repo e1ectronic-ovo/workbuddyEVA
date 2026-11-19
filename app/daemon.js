@@ -57,6 +57,14 @@ async function main() {
   const info = await start({ port: PORT });
   log(APP_NAME + ' 已启动（数据目录: ' + DATA_DIR + '）');
 
+  // 按合并约定完全替代已安装的 WorkDaddy：先结束它的看门狗与守护进程，
+  // 否则两边会同时抢 CDP、切账号和复制会话。
+  const guard = require('../lib/workdaddy-guard');
+  let workdaddy = { stopped: 0, remaining: 0 };
+  try { workdaddy = guard.stop(); } catch (_) {}
+  if (workdaddy.stopped) log('已结束 WorkDaddy 后台进程 ' + workdaddy.stopped + ' 个');
+  if (workdaddy.remaining) log('警告：WorkDaddy 仍有 ' + workdaddy.remaining + ' 个后台进程未结束');
+
   const workbuddy = require('./workbuddy');
   const cdp = require('../lib/cdp');
   const inject = require('../lib/inject');
@@ -137,6 +145,13 @@ async function main() {
   log('WorkBuddy CDP 已就绪: ' + result.port
     + (result.launched ? '（已由本程序启动）' : '')
     + (result.restarted ? '（已重启）' : ''));
+  // WorkDaddy 被杀掉后已经绘制的面板和主题还在页面里，刷新一次交给本程序重新注入。
+  if (workdaddy.stopped && !result.launched && !result.restarted) {
+    try {
+      await cdp.evaluate('location.reload()', { timeout: 2000 });
+      log('已刷新 WorkBuddy 界面，清除 WorkDaddy 残留');
+    } catch (_) {}
+  }
 
   // WorkBuddy 退出后本程序随之退出：tasklist 轻量轮询，连续 3 次未命中才判定退出
   let misses = 0;

@@ -61,13 +61,13 @@ function runningProcesses() {
   if (process.platform !== 'win32') return [];
   try {
     const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command',
-      "Get-CimInstance Win32_Process -Filter \"Name='WorkBuddy.exe'\" | Select-Object ProcessId,ExecutablePath,CommandLine | ConvertTo-Json -Compress",
+      "Get-CimInstance Win32_Process -Filter \"Name='WorkBuddy.exe'\" | Select-Object ProcessId,ExecutablePath,CommandLine,ThreadCount | ConvertTo-Json -Compress",
     ], { encoding: 'utf8', timeout: 6000, windowsHide: true }).trim();
     if (!out) return [];
     const parsed = JSON.parse(out);
-    // 已终止但尚未被回收的僵尸进程两项都为空，不应当作“WorkBuddy 仍在运行”
+    // 已终止但句柄未释放的僵尸进程仍会被枚举，但线程数为 0，不能当作“WorkBuddy 仍在运行”
     return (Array.isArray(parsed) ? parsed : [parsed])
-      .filter((row) => row && (row.ExecutablePath || row.CommandLine))
+      .filter((row) => row && (row.ExecutablePath || row.CommandLine) && Number(row.ThreadCount) > 0)
       .map((row) => ({
         pid: Number(row.ProcessId) || 0,
         exe: row.ExecutablePath || '',
@@ -78,14 +78,15 @@ function runningProcesses() {
   }
 }
 
-// 轻量进程检测：tasklist 比 PowerShell 查询快，供“WorkBuddy 退出后自动退出”轮询使用
+// 轻量进程检测：tasklist 比 PowerShell 查询快，供“WorkBuddy 退出后自动退出”轮询使用。
+// STATUS ne Unknown 排除已退出但句柄未释放的僵尸进程（它们会让轮询误以为 WorkBuddy 还在）。
 function isRunning() {
   if (process.platform !== 'win32') return false;
   try {
-    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq WorkBuddy.exe', '/NH'], {
+    const out = execFileSync('tasklist', ['/FI', 'IMAGENAME eq WorkBuddy.exe', '/FI', 'STATUS ne Unknown', '/NH'], {
       encoding: 'utf8', timeout: 4000, windowsHide: true,
     });
-    return /WorkBuddy.exe/i.test(out);
+    return /WorkBuddy\.exe/i.test(out);
   } catch (_) {
     return false;
   }

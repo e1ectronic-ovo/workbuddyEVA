@@ -343,6 +343,12 @@ async function status(force) {
   return lastStatus;
 }
 
+// 会话 ID 会参与本地文件路径拼接，只接受 WorkBuddy 实际使用的字符集。
+function sessionId(value) {
+  const id = String(value || '').trim();
+  return /^[A-Za-z0-9_-]{1,200}$/.test(id) ? id : '';
+}
+
 function json(res, code, data) {
   const body = JSON.stringify(data);
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Length': Buffer.byteLength(body) });
@@ -354,13 +360,17 @@ function text(res, code, body, type) {
   res.end(body);
 }
 
-function readBody(req) {
+function readBody(req, limit = 1024 * 1024) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
     req.on('data', chunk => {
       size += chunk.length;
-      if (size > 1024 * 1024) { reject(new Error('请求体过大')); req.destroy(); return; }
+      if (size > limit) {
+        reject(new Error('请求体过大（上限 ' + Math.round(limit / 1024 / 1024) + 'MB）'));
+        req.destroy();
+        return;
+      }
       chunks.push(chunk);
     });
     req.on('end', () => {
@@ -677,16 +687,34 @@ async function handleApi(req, res, url) {
     try {
       const uid = String(body.uid || '').trim();
       if (!uid) return json(res, 400, { ok: false, error: '缺少账号 uid' });
+      let previous = '';
+      try { previous = (wbAuth.currentAccount() || {}).uid || ''; } catch (_) {}
       const account = wbAuth.switchAccount(uid);
+      // 切换后顺手把上一个账号的会话复制到目标账号，避免切完看不到历史记录。
+      let sync = null;
+      if (body.sync !== false && previous && previous !== uid) {
+        try {
+          sync = await wbSessions.syncSessions({
+            from: previous, to: uid,
+            ids: Array.isArray(body.ids) ? body.ids.map(sessionId).filter(Boolean) : undefined,
+          });
+        } catch (err) {
+          sync = { error: err.message, copied: [], skipped: [], errors: [] };
+        }
+      }
       let reloaded = false;
       if (body.reload !== false) {
         try {
-          await cdp.evaluate('location.reload()', { timeout: 2000 });
+          // renderer 的 URL 带着旧账号的 accountSnapshot，直接 reload 会用旧身份重新水合。
+          await cdp.evaluate('(() => { try { const u = new URL(location.href);'
+            + ' if (u.searchParams.has("accountSnapshot")) { u.searchParams.delete("accountSnapshot");'
+            + ' history.replaceState(history.state, "", u.pathname + u.search + u.hash); } } catch (e) {}'
+            + ' location.reload(); return true; })()', { timeout: 2000 });
           reloaded = true;
         } catch (_) {}
         lastStatusAt = 0;
       }
-      return json(res, 200, { ok: true, account, reloaded });
+      return json(res, 200, { ok: true, account, reloaded, sync });
     } catch (err) {
       return json(res, 500, { ok: false, error: err.message });
     }
@@ -795,7 +823,9 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && p === '/api/wb/sessions/rename') {
     const body = await readBody(req);
     try {
-      const result = await wbSessions.rename(String(body.id || ''), String(body.title || '').trim());
+      const id = sessionId(body.id);
+      if (!id) return json(res, 400, { ok: false, error: '无效的会话 ID' });
+      const result = await wbSessions.rename(id, String(body.title || '').trim());
       if (!result.changes) return json(res, 404, { ok: false, error: '会话不存在或已删除' });
       return json(res, 200, { ok: true });
     } catch (err) {
@@ -805,7 +835,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && p === '/api/wb/sessions/delete') {
     const body = await readBody(req);
     try {
-      const ids = Array.isArray(body.ids) ? body.ids : [];
+      const ids = Array.isArray(body.ids) ? body.ids.map(sessionId).filter(Boolean) : [];
       if (!ids.length) return json(res, 400, { ok: false, error: '没有选择会话' });
       const result = body.hard
         ? await wbSessions.hardRemove(ids)
@@ -818,16 +848,52 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && p === '/api/wb/sessions/restore') {
     const body = await readBody(req);
     try {
-      const ids = Array.isArray(body.ids) ? body.ids : [];
+      const ids = Array.isArray(body.ids) ? body.ids.map(sessionId).filter(Boolean) : [];
       if (!ids.length) return json(res, 400, { ok: false, error: '没有选择会话' });
       return json(res, 200, { ok: true, ...(await wbSessions.restore(ids)) });
     } catch (err) {
       return json(res, 500, { ok: false, error: err.message });
     }
   }
+  if (req.method === 'POST' && p === '/api/wb/sessions/sync') {
+    const body = await readBody(req);
+    try {
+      const from = String(body.from || '').trim();
+      const to = String(body.to || '').trim();
+      const ids = Array.isArray(body.ids) ? body.ids.map(sessionId).filter(Boolean) : [];
+      if (!to) return json(res, 400, { ok: false, error: '请选择目标账号' });
+      if (!from && !ids.length) return json(res, 400, { ok: false, error: '请选择要同步的会话' });
+      const result = await wbSessions.syncSessions({ from, to, ids });
+      return json(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
+  if (req.method === 'POST' && p === '/api/wb/sessions/import') {
+    let body;
+    try {
+      body = await readBody(req, 128 * 1024 * 1024);
+    } catch (err) {
+      return json(res, 413, { ok: false, error: err.message });
+    }
+    try {
+      const uid = String(body.uid || '').trim();
+      let bundles = [];
+      if (Array.isArray(body.sessions)) bundles = body.sessions;
+      else if (Array.isArray(body.bundles)) bundles = body.bundles;
+      else if (body.bundle) bundles = [body.bundle];
+      if (!bundles.length) return json(res, 400, { ok: false, error: '文件里没有会话数据' });
+      const result = await wbSessions.importSessions(bundles, uid);
+      return json(res, 200, { ok: true, ...result });
+    } catch (err) {
+      return json(res, 500, { ok: false, error: err.message });
+    }
+  }
   if (req.method === 'GET' && p === '/api/wb/sessions/export') {
     try {
-      const bundle = await wbSessions.exportSession(String(url.searchParams.get('id') || ''));
+      const id = sessionId(url.searchParams.get('id'));
+      if (!id) return json(res, 400, { ok: false, error: '无效的会话 ID' });
+      const bundle = await wbSessions.exportSession(id);
       res.writeHead(200, {
         'Content-Type': 'application/json; charset=utf-8',
         'Content-Disposition': 'attachment; filename="' + encodeURIComponent(bundle.name) + '"',
@@ -842,7 +908,7 @@ async function handleApi(req, res, url) {
     const body = await readBody(req);
     try {
       const ids = Array.isArray(body.ids)
-        ? body.ids.map((id) => String(id || '').trim()).filter(Boolean).slice(0, 500)
+        ? body.ids.map(sessionId).filter(Boolean).slice(0, 500)
         : [];
       if (!ids.length) return json(res, 400, { ok: false, error: '没有选择会话' });
       const sessions = [];

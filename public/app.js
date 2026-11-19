@@ -76,6 +76,11 @@ const el = {
   wbSessionsExport: document.getElementById('wbSessionsExport'),
   wbSessionsSynced: document.getElementById('wbSessionsSynced'),
   wbSessionsRefresh: document.getElementById('wbSessionsRefresh'),
+  wbSessionsTarget: document.getElementById('wbSessionsTarget'),
+  wbSessionsSync: document.getElementById('wbSessionsSync'),
+  wbSessionsSyncHint: document.getElementById('wbSessionsSyncHint'),
+  wbSessionsImport: document.getElementById('wbSessionsImport'),
+  wbSessionsImportFile: document.getElementById('wbSessionsImportFile'),
   wbSessions: document.getElementById('wbSessions'),
   wbAboutMeta: document.getElementById('wbAboutMeta'),
   wbUpdateStatus: document.getElementById('wbUpdateStatus'),
@@ -1082,13 +1087,21 @@ el.wbAccounts.addEventListener('click', async (ev) => {
       const ok = await confirmSheet({
         icon: 'restart',
         title: '切换到这个账号？',
-        message: '当前 WorkBuddy 窗口会刷新，聊天记录不受影响。',
+        message: '当前账号的会话会一并同步到目标账号，然后刷新 WorkBuddy 窗口。',
         ok: '切换',
       });
       if (!ok) return;
+      button.disabled = true;
+      button.textContent = '切换中…';
       const data = await api('/api/wb/accounts/switch', { uid });
-      toast('已切换到 ' + (data.account.nickname || name) + (data.reloaded ? '，窗口正在刷新' : ''));
+      const copied = data.sync && !data.sync.error && data.sync.copied ? data.sync.copied.length : 0;
+      const syncError = data.sync && data.sync.error;
+      toast('已切换到 ' + (data.account.nickname || name)
+        + (copied ? '，同步 ' + copied + ' 个会话' : '')
+        + (syncError ? '，会话同步失败：' + syncError : '')
+        + (data.reloaded ? '，窗口正在刷新' : ''), !!syncError);
       setTimeout(() => loadWbAccounts().catch(() => {}), 1500);
+      setTimeout(() => loadWbSessions({ silent: true }).catch(() => {}), 3000);
       return;
     }
     if (act === 'checkin') {
@@ -1126,7 +1139,8 @@ el.wbAccounts.addEventListener('click', async (ev) => {
   } finally {
     if (button.isConnected) {
       button.disabled = false;
-      button.textContent = act === 'checkin' ? '签到' : (act === 'credits' ? '查额度' : button.textContent);
+      button.textContent = act === 'checkin' ? '签到'
+        : (act === 'credits' ? '查额度' : (act === 'switch' ? '切换' : button.textContent));
     }
   }
 });
@@ -1287,10 +1301,28 @@ function updateSessionSelectionUi() {
   const count = wbSessionSelected.size;
   el.wbSessionsExport.disabled = count === 0;
   el.wbSessionsExport.textContent = count ? '导出所选（' + count + '）' : '导出所选';
+  el.wbSessionsSync.disabled = count === 0;
+  el.wbSessionsSync.textContent = count ? '同步所选（' + count + '）' : '同步所选';
   const rows = wbSessionsData.rows || [];
   const all = rows.length > 0 && rows.every(row => wbSessionSelected.has(String(row.id)));
   el.wbSessionAll.checked = all;
   el.wbSessionAll.indeterminate = !all && rows.some(row => wbSessionSelected.has(String(row.id)));
+}
+
+function sessionAccountLabel(uid) {
+  return (wbSessionsData.labels && wbSessionsData.labels[uid]) || shortUid(uid);
+}
+
+function renderSessionTargets(accounts) {
+  const selected = el.wbSessionsTarget.value;
+  el.wbSessionsTarget.innerHTML = '<option value="">目标账号：当前账号</option>'
+    + (accounts || []).map((row) => '<option value="' + esc(row.uid) + '">'
+      + esc(sessionAccountLabel(row.uid)) + '（' + row.count + '）</option>').join('');
+  el.wbSessionsTarget.value = selected;
+}
+
+function currentSessionUid() {
+  return (wbAccountsData.current && wbAccountsData.current.uid) || '';
 }
 
 function renderWbSessions() {
@@ -1355,6 +1387,7 @@ async function loadWbSessions(options = {}) {
       return '<option value="' + esc(row.uid) + '">' + esc(label) + '（' + row.count + '）</option>';
     }).join('');
     el.wbSessionAccount.value = selected;
+    renderSessionTargets(data.accounts);
     const key = JSON.stringify(wbSessionsData);
     if (key !== wbSessionsKey || !options.silent) {
       wbSessionsKey = key;
@@ -1444,6 +1477,87 @@ async function exportSelectedSessions() {
 }
 
 el.wbSessionsExport.addEventListener('click', exportSelectedSessions);
+
+async function syncSelectedSessions() {
+  const ids = [...wbSessionSelected];
+  if (!ids.length) return;
+  const to = el.wbSessionsTarget.value;
+  if (!to) {
+    toast('请先在「目标账号」里选择要同步到的账号', true);
+    return;
+  }
+  const label = sessionAccountLabel(to);
+  const ok = await confirmSheet({
+    icon: 'info',
+    title: '同步 ' + ids.length + ' 个会话？',
+    message: '会话记录、消息文件和附件会复制到「' + label + '」，已存在的相同会话自动跳过。原账号的会话不受影响。',
+    ok: '开始同步',
+  });
+  if (!ok) return;
+  const previous = el.wbSessionsSync.textContent;
+  el.wbSessionsSync.disabled = true;
+  el.wbSessionsSync.textContent = '同步中…';
+  try {
+    const data = await api('/api/wb/sessions/sync', { to, ids });
+    const parts = ['已同步 ' + (data.copied || []).length + ' 个会话'];
+    if ((data.skipped || []).length) parts.push('跳过 ' + data.skipped.length + ' 个');
+    if ((data.errors || []).length) parts.push('失败 ' + data.errors.length + ' 个');
+    toast(parts.join('，'), (data.errors || []).length > 0);
+    await loadWbSessions();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    el.wbSessionsSync.textContent = previous;
+    updateSessionSelectionUi();
+  }
+}
+
+el.wbSessionsSync.addEventListener('click', syncSelectedSessions);
+
+el.wbSessionsImport.addEventListener('click', () => el.wbSessionsImportFile.click());
+
+el.wbSessionsImportFile.addEventListener('change', async () => {
+  const file = el.wbSessionsImportFile.files && el.wbSessionsImportFile.files[0];
+  el.wbSessionsImportFile.value = '';
+  if (!file) return;
+  const to = el.wbSessionsTarget.value || currentSessionUid();
+  if (!to) {
+    toast('没有可导入的目标账号，请先在 WorkBuddy 登录', true);
+    return;
+  }
+  const previous = el.wbSessionsImport.textContent;
+  el.wbSessionsImport.disabled = true;
+  el.wbSessionsImport.textContent = '读取中…';
+  try {
+    let data;
+    try { data = JSON.parse(await file.text()); }
+    catch (_) { throw new Error('不是有效的会话导出文件'); }
+    const bundles = Array.isArray(data.sessions)
+      ? data.sessions
+      : (Array.isArray(data.bundles) ? data.bundles : (data.session ? [data] : []));
+    if (!bundles.length) throw new Error('文件里没有会话数据');
+    const ok = await confirmSheet({
+      icon: 'info',
+      title: '导入 ' + bundles.length + ' 个会话？',
+      message: '会话记录与消息文件会导入到「' + sessionAccountLabel(to)
+        + '」，已存在的相同会话自动跳过。',
+      ok: '导入',
+    });
+    if (!ok) return;
+    el.wbSessionsImport.textContent = '导入中…';
+    const result = await api('/api/wb/sessions/import', { uid: to, sessions: bundles });
+    const parts = ['已导入 ' + (result.imported || []).length + ' 个会话'];
+    if ((result.duplicates || []).length) parts.push('跳过 ' + result.duplicates.length + ' 个重复会话');
+    if ((result.errors || []).length) parts.push('失败 ' + result.errors.length + ' 个');
+    toast(parts.join('，'), (result.errors || []).length > 0);
+    await loadWbSessions();
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    el.wbSessionsImport.disabled = false;
+    el.wbSessionsImport.textContent = previous;
+  }
+});
 
 el.wbSessions.addEventListener('click', async (ev) => {
   const button = ev.target.closest('button[data-act]');

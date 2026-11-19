@@ -3,11 +3,40 @@
 // 在 Node 22+ 或 WorkBuddy 自带的 Electron Node 下运行，读写 workbuddy.db。
 // 只接受本程序构造的固定操作，不执行任意 SQL。
 const { DatabaseSync } = require('node:sqlite');
+const crypto = require('node:crypto');
 
 const DB_PATH = process.env.WBWE_SESSION_DB || '';
 
 function placeholders(count) {
   return new Array(count).fill('?').join(',');
+}
+
+function normalizePath(value) {
+  return String(value || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+}
+
+// 复制到同一账号的判定：标题、路径与创建时间都相同视为同一条会话。
+function sessionSignature(row) {
+  return normalizePath(row && row.title) + '\u0000' + normalizePath(row && row.cwd)
+    + '\u0000' + Number((row && row.created_at) || 0);
+}
+
+function tableColumns(db, table) {
+  return db.prepare('PRAGMA table_info(' + table + ')').all().map((column) => column.name);
+}
+
+function insertRow(db, table, row, columns) {
+  const names = columns.filter((name) => Object.prototype.hasOwnProperty.call(row, name));
+  db.prepare('INSERT INTO ' + table + ' (' + names.join(',') + ') VALUES ('
+    + placeholders(names.length) + ')').run(...names.map((name) => row[name]));
+}
+
+function copyUsage(db, sourceId, targetId, now) {
+  const usage = db.prepare('SELECT used, size, credit_json FROM session_usage WHERE session_id = ?').get(sourceId);
+  if (!usage) return null;
+  db.prepare('INSERT OR REPLACE INTO session_usage (session_id, used, size, updated_at, credit_json) VALUES (?,?,?,?,?)')
+    .run(targetId, Number(usage.used) || 0, Number(usage.size) || 0, now, usage.credit_json || null);
+  return { used: Number(usage.used) || 0, size: Number(usage.size) || 0, credit_json: usage.credit_json || null };
 }
 
 function normalizeIds(value) {
@@ -22,7 +51,8 @@ function normalizeIds(value) {
 function run(input) {
   if (!DB_PATH) throw new Error('缺少会话数据库路径');
   const readOnly = input.op !== 'rename' && input.op !== 'softDelete'
-    && input.op !== 'restore' && input.op !== 'hardDelete';
+    && input.op !== 'restore' && input.op !== 'hardDelete'
+    && input.op !== 'copy' && input.op !== 'insert' && input.op !== 'removeRow';
   const db = new DatabaseSync(DB_PATH, readOnly ? { readOnly: true } : {});
   try {
     if (input.op === 'list') {
@@ -93,6 +123,90 @@ function run(input) {
         "SELECT COUNT(*) AS count FROM sessions WHERE deleted_at IS NULL AND status IN ('Working', 'Planning')",
       ).get();
       return { count: Number(row.count) || 0 };
+    }
+    if (input.op === 'copy') {
+      const from = String(input.from || '').trim();
+      const to = String(input.to || '').trim();
+      if (!to) throw new Error('账号参数无效');
+      const ids = normalizeIds(input.ids);
+      if (!from && !ids.length) throw new Error('账号参数无效');
+      if (from && from === to) throw new Error('源账号和目标账号相同');
+      const limit = Math.max(1, Math.min(1000, Number(input.limit) || 500));
+      const rows = ids.length
+        ? db.prepare('SELECT * FROM sessions WHERE deleted_at IS NULL AND id IN ('
+          + placeholders(ids.length) + ')').all(...ids)
+        : db.prepare('SELECT * FROM sessions WHERE user_id = ? AND deleted_at IS NULL ORDER BY'
+          + ' COALESCE(last_activity_at, updated_at, created_at) DESC LIMIT ?').all(from, limit);
+      const columns = tableColumns(db, 'sessions');
+      const seenByUser = new Map();
+      const seenFor = (uid) => {
+        if (!seenByUser.has(uid)) {
+          seenByUser.set(uid, new Set(db.prepare('SELECT title, cwd, created_at FROM sessions WHERE user_id = ?')
+            .all(uid).map(sessionSignature)));
+        }
+        return seenByUser.get(uid);
+      };
+      const copies = [];
+      const skipped = [];
+      const now = Date.now();
+      for (const row of rows) {
+        if (String(row.user_id || '') === to) {
+          skipped.push({ id: row.id, reason: '会话已属于目标账号' });
+          continue;
+        }
+        if (/working|planning/i.test(String(row.status || ''))) {
+          skipped.push({ id: row.id, reason: '会话正在运行' });
+          continue;
+        }
+        const signature = sessionSignature(row);
+        const seen = seenFor(to);
+        if (seen.has(signature)) {
+          skipped.push({ id: row.id, reason: '目标账号已有相同会话' });
+          continue;
+        }
+        const newId = crypto.randomUUID();
+        const next = Object.assign({}, row, {
+          id: newId, user_id: to, updated_at: now,
+          last_activity_at: row.last_activity_at || row.updated_at || now, deleted_at: null,
+        });
+        insertRow(db, 'sessions', next, columns);
+        const usage = copyUsage(db, row.id, newId, now);
+        seen.add(signature);
+        copies.push({ sourceId: row.id, id: newId, row: next, usage });
+      }
+      return { copies, skipped };
+    }
+    if (input.op === 'insert') {
+      const source = input.row && typeof input.row === 'object' ? input.row : null;
+      if (!source) throw new Error('缺少会话记录');
+      const uid = String(input.user_id || source.user_id || '').trim();
+      if (!uid) throw new Error('缺少目标账号');
+      const columns = tableColumns(db, 'sessions');
+      const now = Date.now();
+      const row = Object.assign({}, source, { user_id: uid, updated_at: now, deleted_at: null });
+      if (row.created_at === undefined || row.created_at === null) row.created_at = now;
+      if (row.last_activity_at === undefined || row.last_activity_at === null) row.last_activity_at = row.created_at;
+      if (row.cwd === undefined || row.cwd === null) row.cwd = '';
+      if (row.status === undefined || row.status === null) row.status = 'completed';
+      const signature = sessionSignature(row);
+      const existing = db.prepare('SELECT id, title, cwd, created_at FROM sessions WHERE user_id = ?')
+        .all(uid).find((item) => sessionSignature(item) === signature);
+      if (existing) return { duplicate: true, id: existing.id, row: null };
+      row.id = crypto.randomUUID();
+      insertRow(db, 'sessions', row, columns);
+      const usage = input.usage && typeof input.usage === 'object' ? input.usage : null;
+      if (usage) {
+        db.prepare('INSERT OR REPLACE INTO session_usage (session_id, used, size, updated_at, credit_json) VALUES (?,?,?,?,?)')
+          .run(row.id, Number(usage.used) || 0, Number(usage.size) || 0, now, usage.credit_json || null);
+      }
+      return { duplicate: false, id: row.id, row };
+    }
+    if (input.op === 'removeRow') {
+      const id = String(input.id || '');
+      if (!id) throw new Error('缺少会话 ID');
+      db.prepare('DELETE FROM session_usage WHERE session_id = ?').run(id);
+      const result = db.prepare('DELETE FROM sessions WHERE id = ?').run(id);
+      return { changes: Number(result.changes) };
     }
     throw new Error('未知操作: ' + String(input.op));
   } finally {
