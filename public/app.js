@@ -1725,6 +1725,7 @@ el.wbPowerSleep.addEventListener('click', async () => {
 // ---------- 关于 ----------
 let wbAboutLoading = false;
 let wbUpdateInfo = null;
+let wbLastDownload = null;
 let wbUpdateChecking = false;
 let wbUpdatePolling = false;
 
@@ -1767,8 +1768,9 @@ function renderUpdateInfo(info) {
       el.wbUpdateNotes.hidden = false;
     }
     if (info.download) {
-      el.wbUpdateDownload.textContent = '下载更新' + (info.download.size
-        ? '（' + fmtBytes(info.download.size) + '）' : '');
+      const kind = info.download.kind === 'payload' ? '增量更新' : '完整安装包';
+      el.wbUpdateDownload.textContent = '下载更新（' + kind
+        + (info.download.size ? ' · ' + fmtBytes(info.download.size) : '') + '）';
       el.wbUpdateDownload.hidden = false;
     } else {
       el.wbUpdateStatus.textContent += '（该版本没有可下载的安装包）';
@@ -1787,17 +1789,24 @@ function renderUpdateInfo(info) {
 
 function renderUpdateDownload(d) {
   if (!d) return;
+  wbLastDownload = d;
+  const incremental = d.kind === 'payload';
   if (d.state === 'downloading') {
     const total = Number(d.total) || 0;
     const pct = total ? Math.min(100, Math.round((Number(d.received) || 0) / total * 100)) : 0;
+    const label = incremental
+      ? (d.phase === 'assets' ? '正在下载资源包' : '正在下载增量更新')
+      : '正在下载更新';
     el.wbUpdateStatus.textContent = total
-      ? '正在下载更新 ' + pct + '%（' + fmtBytes(d.received) + ' / ' + fmtBytes(total) + '）…'
-      : '正在下载更新 ' + fmtBytes(d.received) + '…';
+      ? label + ' ' + pct + '%（' + fmtBytes(d.received) + ' / ' + fmtBytes(total) + '）…'
+      : label + ' ' + fmtBytes(d.received) + '…';
     el.wbUpdateDownload.hidden = true;
     el.wbUpdateInstall.hidden = true;
   } else if (d.state === 'done') {
-    el.wbUpdateStatus.textContent = '更新已下载并通过校验：' + (d.name || '安装包')
-      + '。运行安装程序会先退出 workbuddyEVA，安装完成后自动重新启动。';
+    el.wbUpdateStatus.textContent = incremental
+      ? '增量更新已下载并通过校验（' + (d.version || d.name || '') + '）。应用后 workbuddyEVA 会自动退出并重新启动。'
+      : '更新已下载并通过校验：' + (d.name || '安装包')
+        + '。运行安装程序会先退出 workbuddyEVA，安装完成后自动重新启动。';
     el.wbUpdateDownload.hidden = true;
     el.wbUpdateDownload.disabled = false;
     el.wbUpdateInstall.hidden = false;
@@ -1837,6 +1846,14 @@ async function checkWbUpdate(force) {
   el.wbUpdateInstall.hidden = true;
   try {
     renderUpdateInfo(await api('/api/update' + (force ? '?force=1' : '')));
+    try {
+      const d = (await api('/api/update/download')).download;
+      if (d && (d.state === 'done' || d.state === 'downloading')
+        && (!d.version || !wbUpdateInfo.latest || d.version === wbUpdateInfo.latest)) {
+        renderUpdateDownload(d);
+        if (d.state === 'downloading') pollUpdateDownload();
+      }
+    } catch (_) {}
   } catch (err) {
     el.wbUpdateStatus.textContent = '检查更新失败：' + err.message;
   } finally {
@@ -1869,9 +1886,11 @@ el.wbUpdateDownload.addEventListener('click', async () => {
   if (!wbUpdateInfo || !wbUpdateInfo.hasUpdate) return;
   const size = wbUpdateInfo.download && wbUpdateInfo.download.size
     ? '（约 ' + fmtBytes(wbUpdateInfo.download.size) + '）' : '';
+  const incremental = Boolean(wbUpdateInfo.incremental);
   const ok = await confirmSheet({
     title: '下载更新',
-    message: '将从 GitHub 下载 workbuddyEVA ' + wbUpdateInfo.latest + ' 的安装包' + size
+    message: '将从 GitHub 下载 workbuddyEVA ' + wbUpdateInfo.latest + ' 的'
+      + (incremental ? '增量更新包' + size + '，只包含有变化的程序文件（资源有变化时会再下载资源包）' : '完整安装包' + size)
       + '，保存到数据目录下的 updates 文件夹。下载完成后由你决定是否安装。现在开始下载吗？',
     icon: 'restart',
   });
@@ -1889,16 +1908,28 @@ el.wbUpdateDownload.addEventListener('click', async () => {
 });
 
 el.wbUpdateInstall.addEventListener('click', async () => {
+  const incremental = Boolean((wbUpdateInfo && wbUpdateInfo.incremental)
+    || (wbLastDownload && wbLastDownload.kind === 'payload'));
   const ok = await confirmSheet({
     title: '安装更新',
-    message: '安装程序会先退出 workbuddyEVA，把程序更新为新版本后自动重新启动；壁纸配置与账号数据会保留。现在运行安装程序吗？',
+    message: incremental
+      ? '会应用已下载的增量更新：workbuddyEVA 先退出，替换程序文件后自动重新启动；壁纸配置与账号数据会保留。现在更新吗？'
+      : '安装程序会先退出 workbuddyEVA，把程序更新为新版本后自动重新启动；壁纸配置与账号数据会保留。现在运行安装程序吗？',
     icon: 'restart',
   });
   if (!ok) return;
   el.wbUpdateInstall.disabled = true;
   try {
-    await api('/api/update/install', {});
-    toast('安装程序已启动，请按提示完成更新');
+    const data = await api('/api/update/install', {});
+    const started = (data && data.started) || {};
+    if (started.kind === 'payload' && started.restart !== false) {
+      toast('更新已应用，正在重新启动 workbuddyEVA…');
+      setTimeout(() => { api('/api/quit', {}).catch(() => {}); }, 800);
+    } else if (started.kind === 'payload') {
+      toast('更新已应用，请手动重新启动 workbuddyEVA');
+    } else {
+      toast('安装程序已启动，请按提示完成更新');
+    }
   } catch (err) {
     el.wbUpdateInstall.disabled = false;
     toast(err.message, true);

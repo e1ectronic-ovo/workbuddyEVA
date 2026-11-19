@@ -11,6 +11,7 @@ const { buildPackage } = require('./pkg-build');
 const ROOT = path.join(__dirname, '..');
 const APP_EXE = path.join(ROOT, 'dist', 'workbuddyEVA.exe');
 const OUT = path.join(ROOT, 'dist', 'workbuddyEVA-Setup.exe');
+const PAYLOAD_TREE = path.join(ROOT, 'dist', 'payload');
 const INSTALLER = path.join(ROOT, 'installer');
 const PAYLOAD = path.join(INSTALLER, 'payload');
 const META = require(path.join(ROOT, 'package.json'));
@@ -21,9 +22,27 @@ if (!fs.existsSync(APP_EXE) || process.argv.includes('--build-app')) {
   if (build.status !== 0) process.exit(build.status || 1);
 }
 
+if (!fs.existsSync(path.join(PAYLOAD_TREE, 'package.json'))) {
+  console.log('[setup] 生成应用负载...');
+  const build = spawnSync(process.execPath, [path.join(__dirname, 'build-payload.js')], { cwd: ROOT, stdio: 'inherit' });
+  if (build.status !== 0) process.exit(build.status || 1);
+}
+
+function copyTree(source, target) {
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name);
+    const to = path.join(target, entry.name);
+    if (entry.isDirectory()) copyTree(from, to);
+    else if (entry.isFile()) fs.writeFileSync(to, fs.readFileSync(from));
+  }
+}
+
+fs.rmSync(PAYLOAD, { recursive: true, force: true });
 fs.mkdirSync(PAYLOAD, { recursive: true });
 fs.copyFileSync(APP_EXE, path.join(PAYLOAD, 'workbuddyEVA.exe'));
 fs.copyFileSync(path.join(ROOT, 'assets', 'app.ico'), path.join(PAYLOAD, 'app.ico'));
+copyTree(PAYLOAD_TREE, path.join(PAYLOAD, 'app-payload'));
 fs.writeFileSync(path.join(INSTALLER, 'meta.json'), JSON.stringify({
   version: META.version,
   productName: META.productName,

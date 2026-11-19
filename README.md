@@ -49,7 +49,7 @@ WorkBuddy 退出后（托盘退出、崩溃或被关闭），本程序会在约 
 3. 面板右上角关闭按钮或 `Esc` 退出面板；底部图标始终保留，方便随时打开。
 4. 下次启动恢复上次壁纸；WorkBuddy 重启或页面刷新后，2 秒内自动补回壁纸层或右下角图标。
 5. 每个会话的消息末尾下方会显示本会话的累计用量（共 X Token · Y 积分 · 模型 × 调用次数）；点击展开「本会话用量明细」，按模型列调用次数、Token 与积分，并支持复制；没有转录时回退显示上下文占用。
-6. 「关于」页会自动检查 GitHub 上的最新发布并展示更新明细；只有点击「下载更新」才会下载安装包，下载完成后由你决定是否运行安装程序。
+6. 「关于」页会自动检查 GitHub 上的最新发布并展示更新明细；安装版默认只下载**增量更新包**（几 MB，只含有变化的程序文件，资源未变时不会重复下载），便携版或增量不可用时才下载完整安装包；下载完成后由你决定是否安装，安装后会退出并自动重新启动。
 
 ### 控制面板
 
@@ -82,12 +82,29 @@ WorkBuddy 退出后（托盘退出、崩溃或被关闭），本程序会在约 
 | 电源保持策略 | 同上目录的 `wb\power.json` |
 | 会话索引缓存 | 同上目录的 `wb\sessions\index.json` |
 | 会话数据库备份 | 同上目录的 `wb\backups\` |
-| 更新安装包 | 同上目录的 `updates\`（仅在你点击「下载更新」后出现） |
+| 更新包 | 同上目录的 `updates\`（仅在你点击「下载更新」后出现，含增量 `.pack` 或完整安装包） |
 | 旧配置迁移 | 首次运行自动从 `%APPDATA%\Asuka Wallpaper\data`、`%APPDATA%\WorkBuddy Wallpaper Engine\data`、`%APPDATA%\WorkDaddy\wallpaper`、`%APPDATA%\workbuddy-wallpaper-engine\data`、仓库 `data/` 迁移 |
 
 可用 `WBWE_DATA_DIR` 覆盖数据目录，`WBWE_PORT` 覆盖面板端口，`WBWE_CDP_PORT` 强制指定 CDP 端口，`WBWE_WORKBUDDY_BIN` 指定 WorkBuddy.exe 路径，`WBWE_NO_UI=1` 关闭启动阶段的原生对话框（只写日志，便于自动化测试）。
 
 会话模块需要 Node 22（`node:sqlite`）；如果当前 Node 低于 22，会自动改用 WorkBuddy 自带 Electron，以 `ELECTRON_RUN_AS_NODE=1` 执行受限的 SQLite 辅助脚本。
+
+## 更新机制
+
+安装版目录分「外壳」和「负载」两部分：
+
+```
+workbuddyEVA.exe       很少变化的启动外壳（含兜底代码）
+payload/               可更新的程序与资源（app/ lib/ public/ …）
+payload.bak/           上一次的负载，更新失败时可回滚
+```
+
+- 每次发版同时提供 `workbuddyEVA-update.pack`（核心负载：程序代码与小文件）、`workbuddyEVA-assets.pack`（图片 / 视频 / 字体等大资源）和完整安装包。
+- 面板检查到新版本后，安装版只下载核心包（通常几 MB）；核心包头记录资源包的 SHA-256，与本地一致就跳过，只有资源变化时才再下载资源包。
+- 安装时先把当前 `payload/` 复制到暂存目录，解包并逐文件校验 SHA-256，再整体替换 `payload/`，旧的留在 `payload.bak/`。任一步失败都不会改动正在使用的目录。
+- 替换完成后程序退出，约 1 秒后由后台脚本重新启动；启动器优先加载 `payload/`，缺失或损坏时回落到 `payload.bak/` 或 exe 内置代码。
+
+源码运行时没有外壳概念，直接读取仓库目录；`npm run build:exe` / `npm run build:setup` 会先生成负载，再打包 exe 与安装程序。
 
 ## 支持的壁纸类型
 
@@ -126,6 +143,7 @@ WorkBuddy ── CDP Runtime.evaluate ──> #wbwe-layer / 右下角图标 / �
 
 ```
 start.cmd              启动入口（查找 Node → app/daemon.js）
+app/launch.js          可执行入口：优先加载 payload/，回落到 payload.bak/ 与内置代码
 app/daemon.js          自有常驻入口：启动壁纸服务、自动唤起 WorkBuddy、随其退出
 app/workbuddy.js       WorkBuddy 查找、CDP 检测、启动与重启
 server.js              HTTP 服务、面板路由与注入调度（不打开浏览器）
@@ -144,14 +162,15 @@ lib/wb-account-state.js 额度与签到结果缓存
 lib/wb-billing.js      积分 / 签到查询
 lib/wb-models.js       模型配置读写
 lib/wb-sessions.js     会话列出、重命名、软删除、恢复、导出、同步 / 导入、用量统计、备份
-lib/update-check.js    GitHub 版本检测、更新包下载与校验
+lib/update-check.js    GitHub 版本检测、增量 / 完整更新下载、校验与应用
+lib/payload-pack.js    增量包格式解析、SHA-256 校验、替换与回滚
 lib/wb-enhance.js      免打扰 / 自动继续的持久化
 lib/wb-power.js        阻止休眠 / 立即休眠
 helpers/               交给 WorkBuddy 自带 Node 执行的外部脚本（登录密钥 / 会话 SQLite）
 public/                控制面板（iframe 嵌入）
 scene-live/            WebWallGL 渲染页
 assets/                应用图标与界面素材
-tools/                 运行时源码固化与构建脚本
+tools/                 运行时源码固化、增量包生成与构建脚本
 installer/             安装 / 卸载程序（安装包入口）
 ```
 

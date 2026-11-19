@@ -266,6 +266,25 @@ function copyInto(installDir, name) {
   fs.writeFileSync(target, buffer);
 }
 
+function copyTree(source, target) {
+  fs.mkdirSync(target, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const from = path.join(source, entry.name);
+    const to = path.join(target, entry.name);
+    if (entry.isDirectory()) copyTree(from, to);
+    else if (entry.isFile()) fs.writeFileSync(to, fs.readFileSync(from));
+  }
+}
+
+function copyPayload(installDir) {
+  const source = path.join(__dirname, 'payload', 'app-payload');
+  if (!fs.existsSync(source)) return;
+  const target = path.join(installDir, 'payload');
+  fs.rmSync(target, { recursive: true, force: true });
+  fs.rmSync(target + '.bak', { recursive: true, force: true });
+  copyTree(source, target);
+}
+
 function install() {
   const existing = installedDir();
   let installDir = '';
@@ -304,6 +323,7 @@ function install() {
     prepareDir(installDir);
     copyInto(installDir, APP_NAME);
     copyInto(installDir, 'app.ico');
+    copyPayload(installDir);
     fs.copyFileSync(process.execPath, path.join(installDir, UNINSTALL_NAME));
     writeDataPath(installDir, dataDir);
   } catch (error) {
@@ -381,9 +401,21 @@ function main() {
   if (ARGV.includes('--self-check')) {
     // 打包后校验内嵌安装内容是否可读（不安装、不弹窗）
     const payload = path.join(__dirname, 'payload');
+    const tree = path.join(payload, 'app-payload');
+    let files = 0;
+    const count = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) count(path.join(dir, entry.name));
+        else files += 1;
+      }
+    };
+    count(tree);
     fs.writeFileSync(path.join(os.tmpdir(), 'workbuddy-eva-setup-selfcheck.json'), JSON.stringify({
       app: fs.statSync(path.join(payload, APP_NAME)).size,
       icon: fs.statSync(path.join(payload, 'app.ico')).size,
+      payloadFiles: files,
+      payloadEntry: fs.existsSync(path.join(tree, 'app', 'daemon.js')),
       version: META.version,
       pkg: !!process.pkg,
     }, null, 2));
