@@ -28,7 +28,9 @@ function shortcutTargets() {
   try {
     const out = execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script],
       { encoding: 'utf8', timeout: 6000, windowsHide: true });
-    return out.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    // 快捷方式按 *WorkBuddy* 模糊匹配，会连带匹配到本程序自己的 workbuddyEVA.lnk，
+    // 必须按文件名严格过滤，否则会把自己当成 WorkBuddy 启动。
+    return out.split(/\r?\n/).map((line) => line.trim()).filter(isWorkBuddyExe);
   } catch (_) {
     return [];
   }
@@ -36,6 +38,21 @@ function shortcutTargets() {
 
 function psQuote(text) {
   return "'" + String(text).replace(/'/g, "''") + "'";
+}
+
+function samePath(a, b) {
+  if (!a || !b) return false;
+  try { return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase(); } catch (_) { return false; }
+}
+
+// 只接受真正名为 WorkBuddy.exe 的可执行文件。
+// workbuddyEVA.exe 的名字里同样含 "workbuddy"，用 --remote-debugging-port 启动它
+// 只会撞上本程序的单实例锁，既不会拉起 WorkBuddy，也不会出现 CDP 端口。
+function isWorkBuddyExe(file) {
+  if (!file) return false;
+  if (path.basename(String(file)).toLowerCase() !== 'workbuddy.exe') return false;
+  if (process.execPath && samePath(file, process.execPath)) return false;
+  return true;
 }
 
 function candidates() {
@@ -93,10 +110,14 @@ function isRunning() {
 }
 
 function findExecutable() {
-  const found = candidates().find(existingFile);
-  if (found) return found;
-  const running = runningProcesses().find((row) => row.exe);
-  return running ? running.exe : '';
+  // 1) 显式指定的路径优先（用户明确意图，不强制改名）
+  const env = process.env.WBWE_WORKBUDDY_BIN;
+  if (env && existingFile(env)) return env;
+  // 2) WorkBuddy 已在运行：直接用它自己的可执行文件，最可靠（支持装在任意盘）
+  const running = runningProcesses().find((row) => isWorkBuddyExe(row.exe) && existingFile(row.exe));
+  if (running) return running.exe;
+  // 3) 常见安装路径 + 开始菜单快捷方式
+  return candidates().find((file) => existingFile(file) && isWorkBuddyExe(file)) || '';
 }
 
 function advertisedPort(command) {
@@ -188,6 +209,12 @@ async function ensureCdp(options = {}) {
   const executable = findExecutable();
   if (!executable) {
     const error = new Error('未找到 WorkBuddy.exe，可用 WBWE_WORKBUDDY_BIN 指定完整路径');
+    error.code = 'NEED_WORKBUDDY';
+    throw error;
+  }
+  // 兜底：绝不要把本程序自己当成 WorkBuddy 启动（会触发单实例锁，CDP 永远不会出现）
+  if (samePath(executable, process.execPath)) {
+    const error = new Error('解析到的 WorkBuddy 路径指向本程序自身（' + executable + '），请用 WBWE_WORKBUDDY_BIN 指定真正的 WorkBuddy.exe');
     error.code = 'NEED_WORKBUDDY';
     throw error;
   }

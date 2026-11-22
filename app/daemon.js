@@ -87,31 +87,17 @@ async function main() {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  // 启动时 WorkBuddy 已在运行：先征得同意再强制重启，避免在旧实例上叠加半套注入。
-  // --restart-workbuddy / WBWE_RESTART_WORKBUDDY=1 视为已授权，静默重启。
+  // 已有可用的调试通道（本程序上次启动的实例、WorkDaddy 或手动带参启动）直接复用；
+  // 只有 WorkBuddy 在跑却没有 CDP 时才需要重启，避免每次启动都强制重启用户会话。
+  // --restart-workbuddy / WBWE_RESTART_WORKBUDDY=1 视为已授权，需要重启时不再询问。
   const preauthorized = process.argv.includes('--restart-workbuddy') || process.env.WBWE_RESTART_WORKBUDDY === '1';
-  let restart = preauthorized;
-  if (workbuddy.runningProcesses().length) {
-    if (!preauthorized) {
-      const ok = ui.confirm('检测到 WorkBuddy 正在运行。\n\nworkbuddyEVA 需要先退出 WorkBuddy 再接管调试通道，否则壁纸和面板可能无法正常注入。\n\n是否现在强制重启 WorkBuddy？（未保存的会话可能丢失）', 'No');
-      if (!ok) {
-        log('用户取消重启 WorkBuddy，退出');
-        ui.info('请先退出 WorkBuddy，再重新启动 ' + APP_NAME + '。');
-        await shutdown();
-        return;
-      }
-    }
-    log('正在退出 WorkBuddy…');
-    await workbuddy.stopWorkBuddy();
-    restart = true;
-  }
 
   let result = null;
   try {
-    result = await workbuddy.ensureCdp({ port: cdpPort, restart, log });
+    result = await workbuddy.ensureCdp({ port: cdpPort, restart: preauthorized, log });
   } catch (error) {
     if (error.code === 'NEED_RESTART') {
-      const ok = ui.confirm('WorkBuddy 正在运行，但没有开启调试通道。\n\n需要重启一次 WorkBuddy 才能继续。未保存的会话可能丢失，是否现在重启？', 'No');
+      const ok = preauthorized || ui.confirm('WorkBuddy 正在运行，但没有开启调试通道。\n\n需要重启一次 WorkBuddy 才能继续。未保存的会话可能丢失，是否现在重启？', 'No');
       if (!ok) {
         log('用户取消了重启 WorkBuddy，退出');
         ui.info(APP_NAME + ' 已退出。退出 WorkBuddy 后重新启动本程序，会自动唤起它。');
@@ -145,6 +131,10 @@ async function main() {
   log('WorkBuddy CDP 已就绪: ' + result.port
     + (result.launched ? '（已由本程序启动）' : '')
     + (result.restarted ? '（已重启）' : ''));
+  // 复用的是别人打开的页面时，旧注入里的端口/令牌可能已失效；先卸载，交给 watchdog 用本次配置重新注入。
+  if (!result.launched && !result.restarted) {
+    try { await cdp.evaluate(inject.buildDispose, { timeout: 3000 }); } catch (_) {}
+  }
   // WorkDaddy 被杀掉后已经绘制的面板和主题还在页面里，刷新一次交给本程序重新注入。
   if (workdaddy.stopped && !result.launched && !result.restarted) {
     try {

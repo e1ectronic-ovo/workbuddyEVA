@@ -1,7 +1,7 @@
 {
   "name": "workbuddy-eva",
   "productName": "workbuddyEVA",
-  "version": "5.0.5",
+  "version": "5.0.6",
   "private": true,
   "description": "workbuddyEVA：自有启动器与 CDP 注入壳，把 Wallpaper Engine 壁纸铺进 WorkBuddy，随 WorkBuddy 启停",
   "main": "app/daemon.js",
